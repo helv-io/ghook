@@ -51,12 +51,13 @@ header .act{border:0;border-left:1px solid var(--line);height:100%;padding:9px 1
 header form:last-child{margin-right:clamp(12px,2.5vw,32px)}
 
 /* card = the bordered section */
-.card{border:1px solid var(--line);background:var(--panel);padding:12px 14px;margin:0 0 12px}
+.card{border:1px solid var(--line);background:var(--panel);padding:12px 14px;margin:0 0 12px;max-width:100%;overflow-wrap:anywhere}
 .card>:first-child{margin-top:0}.card>:last-child{margin-bottom:0}
 .card.flush{padding:0}
 
-/* table: header row small caps + muted, thin dividers, padded cells, one line per row */
-.tablewrap{overflow-x:auto;max-width:100%}
+/* table: header row small caps + muted, thin dividers, padded cells.
+   Cells wrap so the wrapper never needs a horizontal scrollbar, down to 360px. */
+.tablewrap{overflow-x:visible;max-width:100%}
 .table{border-collapse:collapse;width:100%}
 .table th,.table td{padding:8px 12px;text-align:left;vertical-align:middle;border:0;border-bottom:1px solid var(--line2);height:44px}
 .table tr:last-child td,.table tr:last-child th{border-bottom:0}
@@ -67,13 +68,13 @@ header form:last-child{margin-right:clamp(12px,2.5vw,32px)}
 .table tbody tr:hover td,.table tbody tr[data-current] td{background:var(--hover)}
 /* a row marked geturl (a key that may be sent as ?key=): the shared warm tint, text colors untouched */
 .table tbody tr.geturl,.table tbody tr.geturl:hover td{background-color:var(--tint-url)}
-.table td{white-space:nowrap}
+.table td{white-space:normal;overflow-wrap:anywhere}
 .table td.wrap{white-space:normal;overflow-wrap:anywhere;min-width:160px}
 /* primary: the name; a long one wraps instead of pushing the row's actions out of view */
 .table td.primary{white-space:normal;overflow-wrap:anywhere;min-width:12ch}
 .table td.primary code{white-space:normal;overflow-wrap:anywhere;overflow-x:visible}
 /* split: names and descriptions, about 30/70 (names wrap, the description gets the rest). A trailing actions column stays as wide as its buttons. Phones get cards. */
-@media (min-width:721px){.table.split th:first-child,.table.split td.primary{width:30%}.table.split td.wrap{width:70%}.table.split th.actions-th,.table.split td.actions-cell{width:1%}}
+@media (min-width:801px){.table.split th:first-child,.table.split td.primary{width:30%}.table.split td.wrap{width:70%}.table.split th.actions-th,.table.split td.actions-cell{width:1%}}
 /* trunc: the flexible column. max-width:0 lets the cell shrink to the space left (no horizontal
    scrollbar); long values end in an ellipsis and carry the full text in title. */
 .table td.trunc{width:32%;max-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -85,7 +86,9 @@ header form:last-child{margin-right:clamp(12px,2.5vw,32px)}
 
 /* code / mono */
 code,pre,.code,.mono{font-family:var(--mono);font-size:13px}
-code,.code{background:var(--well);border:1px solid var(--line);padding:1px 6px;white-space:nowrap;display:inline-block;max-width:100%;overflow-x:auto;vertical-align:middle}
+/* Inline code chips wrap inside the line. Never nowrap + overflow-x:auto: that
+   draws a tiny horizontal scrollbar on values like gmail.modify in a checkbox label. */
+code,.code{background:var(--well);border:1px solid var(--line);padding:1px 6px;white-space:normal;overflow-wrap:anywhere;overflow-x:visible;display:inline;max-width:100%;vertical-align:baseline}
 /* copybox: a value that copies itself when pressed. A little lighter than a code box, a hint line under the value,
    and the same hover, press and focus states as other buttons. The value wraps; nothing is cut off. */
 .copybox{display:block;width:100%;text-align:left;background:var(--raised);border:1px solid var(--line);padding:8px 12px;min-height:44px;color:var(--fg);line-height:1.4;white-space:normal;cursor:pointer}
@@ -96,7 +99,7 @@ code,.code{background:var(--well);border:1px solid var(--line);padding:1px 6px;w
 .copybox:hover,.copybox:focus-visible{border-color:var(--acc);background:var(--raised-hover);color:var(--fg)}
 .copybox:hover .copyhint,.copybox:focus-visible .copyhint{color:var(--acc)}
 .copybox:active{background:var(--press);border-color:var(--acc)}
-pre{background:var(--well);border:1px solid var(--line);padding:8px 10px;overflow:auto;white-space:pre-wrap;margin:6px 0}
+pre{background:var(--well);border:1px solid var(--line);padding:8px 10px;margin:6px 0;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:hidden;overflow-y:auto}
 .trunc code,.trunc .code,.trunc .mono{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .big{font-size:20px;letter-spacing:.2em;padding:6px 12px}
 
@@ -171,7 +174,7 @@ td.status form{display:inline-flex;margin:0;vertical-align:middle}
 .act.toggle[data-on][data-off]::after{content:attr(data-on);grid-area:2/2;height:0;overflow:hidden;visibility:hidden}
 .act.toggle[data-on][data-off].on::after{content:attr(data-off)}
 /* action groups: the buttons of a screen in labelled groups (lifecycle, maintenance, links, danger); the danger group
-   sits apart on the right, and under 720px the groups stack */
+   sits apart on the right, and under 800px the groups stack */
 .action-groups{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:flex-start;margin:0 0 12px}
 .action-group{min-width:0}
 .group-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 4px}
@@ -236,7 +239,7 @@ input[type=checkbox]{width:auto;accent-color:var(--acc);margin:0}
 .device-copy a{overflow-wrap:anywhere}
 .device-qr{justify-self:end}
 .qr{display:block;width:148px;height:148px;background:#fff}
-@media (max-width:720px){.device{grid-template-columns:minmax(0,1fr)}.device-qr{justify-self:center}}
+@media (max-width:800px){.device{grid-template-columns:minmax(0,1fr)}.device-qr{justify-self:center}}
 /* controls inside a row share its width instead of each taking all of it */
 .row>input:not([type=checkbox]),.row>select{width:auto;flex:1 1 140px;min-width:0}
 textarea{resize:vertical;min-height:64px}
@@ -356,7 +359,7 @@ details.desc>p{margin:4px 0 0 1.2em;color:var(--dim);white-space:pre-line}
 .tool-path{white-space:normal;overflow:visible;overflow-wrap:anywhere;word-break:break-all}
 .tool-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:0 10px;margin-top:4px}
 .tool-fields label{margin:6px 0 2px;font-size:12px}
-@media (max-width:720px){.tool-fields{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:800px){.tool-fields{grid-template-columns:minmax(0,1fr)}}
 /* oa-out: the result of checking an OpenAPI description, and diff: the repair the assistant proposes (before and after) */
 .gated{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
 .oa-out{margin:0 0 12px}
@@ -384,8 +387,8 @@ main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;align-i
 .choices{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
 .choices:has(>:only-child){grid-template-columns:1fr}
 .choices .btn,.choices .act{min-height:48px;display:flex;align-items:center;justify-content:center;font-size:15px;padding:8px 16px}
-@media (max-width:720px){.choices{grid-template-columns:1fr}.choices>:last-child{order:-1}}
-@media (max-width:720px){.quick .act{flex:1 1 30%;min-height:44px;text-align:center}}
+@media (max-width:800px){.choices{grid-template-columns:1fr}.choices>:last-child{order:-1}}
+@media (max-width:800px){.quick .act{flex:1 1 30%;min-height:44px;text-align:center}}
 
 /* kv tables and details: long values wrap instead of widening the page */
 .table.kv code,.modal code{white-space:normal;overflow-wrap:anywhere;overflow-x:visible}
@@ -401,7 +404,7 @@ main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;align-i
    A cell carries data-label (its column name, shown beside the value). Cell roles:
    .primary = the card title (no label), .status = pills beside the title (no label),
    .actions-cell = the button row at the bottom (no label). */
-@media (max-width:720px){
+@media (max-width:800px){
   main{padding:10px 10px 32px}
   .tablewrap{overflow:visible}
   .card.flush.tablewrap{border:0;background:none}
@@ -465,7 +468,7 @@ main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;align-i
   .pair.single>input:first-child{grid-column:1}
   .modal,.modal.wide{width:calc(100vw - 20px);max-width:calc(100vw - 20px);padding:14px}
 }
-@media (max-width:720px){
+@media (max-width:800px){
   .action-group{flex:1 1 100%}
   .action-group.danger-group{margin-left:0;padding-left:0;border-left:0;padding-top:12px;border-top:1px solid var(--bad-line)}
   .menu{flex:0 0 auto}
@@ -480,7 +483,7 @@ main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;align-i
 /* Phones and tablets do not zoom: the viewport meta turns pinch zoom off, touch-action turns off double-tap zoom
    (iOS ignores user-scalable=no), and a field under 16px would make iOS zoom in on focus. Desktop keeps its sizes. */
 html,body{touch-action:manipulation}
-@media (max-width:720px),(pointer:coarse){
+@media (max-width:800px),(pointer:coarse){
   input:not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]),select,textarea,textarea.wide{font-size:16px}
 }
 
@@ -488,8 +491,8 @@ html,body{touch-action:manipulation}
 .try-out{max-height:45vh;overflow:auto;word-break:break-word}
 
 /* long checks in a card wrap as a row instead of a single unbreakable line */
-.card label.check,.form label.check{display:flex;align-items:flex-start;margin:8px 0;line-height:1.45;max-width:100%}
-.card label.check input,.form label.check input{margin-top:3px}
+.card label.check,.form label.check{display:block;margin:8px 0;line-height:1.45;max-width:100%;overflow-wrap:anywhere}
+.card label.check input,.form label.check input{margin-top:3px;margin-right:6px;vertical-align:text-top}
 
 /* ghook: health stats, live feed, wizard, drag handle. Same tokens as the rest of the UI. */
 .skip{position:absolute;left:8px;top:-48px;z-index:100;background:var(--panel);color:var(--fg);border:1px solid var(--acc);padding:8px 12px}
@@ -506,4 +509,4 @@ tr.dragging{opacity:.55}
 .keys span{color:var(--dim)}
 kbd{font-family:var(--mono);font-size:12px;border:1px solid var(--line);background:var(--well);padding:0 5px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media (max-width:720px){.grid2{grid-template-columns:1fr}}
+@media (max-width:800px){.grid2{grid-template-columns:1fr}}

@@ -45,7 +45,7 @@ services:
 3. **accounts**: paste the Google OAuth client, connect a mailbox, set the Pub/Sub topic.
 4. **targets** and **routes**: say where mail goes.
 
-Image: `ghcr.io/helv-io/ghook`. Tags follow the git tag (`v0.1.0`, `0.1.0`, `latest`).
+Image: `ghcr.io/helv-io/ghook`. Tags follow the git tag (`v0.1.1`, `0.1.1`, `latest`).
 
 To upgrade, copy `./data` somewhere safe, then `docker compose pull && docker compose up -d`.
 
