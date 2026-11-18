@@ -1,0 +1,88 @@
+{{define "body"}}
+<p>One Gmail watch per account, one Pub/Sub topic. Ghook pulls the subscription, so nothing here has to be reachable from Google.</p>
+<div class="steps"><span class="pill {{if .HasClient}}ok{{else}}warn{{end}}">1. OAuth client</span><span class="pill {{if .Accounts}}ok{{else}}warn{{end}}">2. Connect</span><span class="pill {{if .Pub.Topic}}ok{{else}}warn{{end}}">3. Pub/Sub</span><span class="pill">4. Watch</span></div>
+{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+
+<div class="card"><h3>1. OAuth client</h3>
+<p>Create a web client in Google Cloud and paste the downloaded JSON. The redirect URI must be exactly this:</p>
+<button type="button" class="copybox" data-copy-text="{{.GoogleRedirect}}" aria-label="Copy the Google redirect URI"><code>{{.GoogleRedirect}}</code><span class="copyhint">Tap to copy</span></button>
+{{if .HasClient}}<p>Client <code>{{.ClientID}}</code> is saved. Paste a new file to rotate it. The secret is never shown.</p>{{end}}
+<form method="post" action="/admin/accounts/client" enctype="multipart/form-data" class="form">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field"><label>Client JSON<textarea name="client_json" rows="6" spellcheck="false" placeholder='{"web":{"client_id":"...","client_secret":"..."}}'></textarea></label></div>
+<div class="field"><label>Or upload the file<input type="file" name="client_file" accept="application/json,.json"></label></div>
+<label class="check"><input type="checkbox" name="workspace_only" value="1"> Save this client for the current workspace only</label>
+<button class="btn" type="submit">Save client</button>
+</form></div>
+
+<div class="card"><h3>2. Connect Google</h3>
+<p>The default scope is <code>gmail.readonly</code>. That is enough to read new mail. Labels that ghook applies, and Gmail filters, need extra scopes. Turn those on only if you want them, then connect again.</p>
+<form method="post" action="/admin/accounts/connect" class="form">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<label class="check"><input type="checkbox" name="gmail_modify" value="1" {{if .Modify}}checked{{end}}> Allow <code>gmail.modify</code> so ghook can create labels and mark routed mail <code>{{.LabelPrefix}}/Routed/&lt;target&gt;</code></label>
+<label class="check"><input type="checkbox" name="gmail_settings" value="1" {{if .SettingsScope}}checked{{end}}> Allow <code>gmail.settings.basic</code> so ghook can create Gmail filters</label>
+<label class="check"><input type="checkbox" name="gmail_pubsub" value="1" {{if .PubSubScope}}checked{{end}}> Also grant the Pub/Sub scope on this user, instead of a service account</label>
+<p class="muted">Reconnect after changing scopes. Google shows an unverified-app screen for a personal Gmail account; that is expected until you publish the consent screen.</p>
+<button class="btn fill" type="submit" {{if not .HasClient}}disabled{{end}}>Connect Google</button>
+</form>
+{{if .Accounts}}<div class="tablewrap"><table class="table">
+<thead><tr><th>Account</th><th>Watch</th><th></th></tr></thead>
+<tbody>{{range .Accounts}}<tr>
+<td class="primary" data-label="Account"><code>{{.Email}}</code>{{if .Disabled}} <span class="pill off">paused</span>{{end}}<span class="sub">{{.Scopes}}</span></td>
+<td data-label="Watch">{{if .WatchError}}<span class="bad">{{.WatchError}}</span>{{else if .WatchExpiry}}{{until .WatchExpiry}}{{else}}not started{{end}}</td>
+<td class="actions-cell" data-label=""><div class="actions">
+<form method="post" action="/admin/accounts/watch"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act">Renew</button></form>
+<form method="post" action="/admin/accounts/pause"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="disabled" value="{{if .Disabled}}0{{else}}1{{end}}"><button class="act">{{if .Disabled}}Resume{{else}}Pause{{end}}</button></form>
+<form method="post" action="/admin/accounts/disconnect" data-confirm="Disconnect {{.Email}}? The watch is stopped and the refresh token is deleted." data-confirm-danger="1"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act danger">Disconnect</button></form>
+</div></td></tr>{{end}}</tbody></table></div>{{end}}
+</div>
+
+<div class="card"><h3>3. Pub/Sub</h3>
+<p>Pull is the default: ghook subscribes from inside your network. A service account with Pub/Sub Subscriber on the subscription is the robust choice, because it does not depend on the Gmail refresh token. The OAuth grant above is the alternative when that Google user can manage the topic.</p>
+<form method="post" action="/admin/accounts/pubsub" enctype="multipart/form-data" class="form wide">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field"><label>Project ID<input name="project" value="{{.Pub.Project}}" autocomplete="off"></label></div>
+<div class="field"><label>Topic<input name="topic" value="{{.Pub.Topic}}" placeholder="ghook" autocomplete="off"></label></div>
+<div class="field"><label>Subscription<input name="subscription" value="{{.Pub.Subscription}}" placeholder="ghook-pull" autocomplete="off"></label></div>
+<div class="field"><label>Mode<select name="mode"><option value="pull" {{if ne .Pub.Mode "push"}}selected{{end}}>Pull (no public URL)</option><option value="push" {{if eq .Pub.Mode "push"}}selected{{end}}>Push (OIDC JWT)</option></select></label></div>
+<div class="field"><label>Push audience<input name="push_audience" value="{{.Pub.PushAudience}}" placeholder="{{.PushURL}}"></label>
+<p class="muted">Push endpoint: <code>{{.PushURL}}</code>. Leave the audience empty to use that URL. Optional service-account email to require in the JWT:</p>
+<input name="push_email" value="{{.Pub.PushEmail}}" placeholder="ghook-push@project.iam.gserviceaccount.com" autocomplete="off"></div>
+<label class="check"><input type="checkbox" name="use_oauth" value="1" {{if .Pub.UseOAuth}}checked{{end}}> Use a connected account's Pub/Sub scope when no service account is saved</label>
+<div class="field"><label>Service account JSON{{if .Pub.HasSA}} <span class="pill ok">saved</span>{{end}}<textarea name="sa_json" rows="4" spellcheck="false" placeholder="Paste a new key to rotate. Leave empty to keep the saved key."></textarea></label></div>
+<div class="field"><label>Or upload<input type="file" name="sa_file" accept="application/json,.json"></label></div>
+<label class="check"><input type="checkbox" name="clear_sa" value="1"> Remove the saved service account</label>
+<div class="row"><button class="btn" type="submit">Save Pub/Sub</button></div>
+</form>
+<form method="post" action="/admin/accounts/pubsub/verify" class="row"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="act" type="submit">Verify topic and subscription</button></form>
+<form method="post" action="/admin/accounts/pubsub/create" class="row"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="act" type="submit">Create topic and pull subscription</button></form>
+<form method="post" action="/admin/accounts/pubsub/grant" class="row"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="act" type="submit">Grant Gmail publish</button></form>
+<p class="muted">Create uses the saved credentials. Grant adds <code>roles/pubsub.publisher</code> for <code>gmail-api-push@system.gserviceaccount.com</code>. Recommended pull settings: ack deadline 60s, retention 7 days, expiration never.</p>
+</div>
+
+<div class="card"><h3>Labels</h3>
+<p>A label <code>{{.LabelPrefix}}/CFO</code> routes to the target named CFO when the label convention is on. <code>{{.LabelPrefix}}/Routed/…</code> is what ghook writes, and it does not route.</p>
+<form method="get" action="/admin/accounts" class="row">
+<label>Mailbox<select name="labels">{{range .Accounts}}<option value="{{.ID}}" {{if eq .ID $.LabelAccount}}selected{{end}}>{{.Email}}</option>{{end}}</select></label>
+<button class="act" type="submit">Show labels</button>
+</form>
+{{if .Labels}}<div class="tablewrap"><table class="table"><thead><tr><th>Label</th></tr></thead><tbody>
+{{range .Labels}}<tr><td class="primary">{{.Name}} <span class="sub mono">{{.ID}}</span></td></tr>{{end}}</tbody></table></div>{{end}}
+<form method="post" action="/admin/accounts/labels" class="form">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field"><label>Account<select name="account">{{range .Accounts}}<option value="{{.ID}}">{{.Email}}</option>{{end}}</select></label></div>
+<div class="field"><label>New label name<input name="name" placeholder="{{.LabelPrefix}}/CFO"></label></div>
+<button class="act" type="submit">Create label</button>
+<p class="muted">Needs <code>gmail.modify</code>.</p>
+</form>
+<form method="post" action="/admin/accounts/filters" class="form">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field"><label>Account<select name="account">{{range .Accounts}}<option value="{{.ID}}">{{.Email}}</option>{{end}}</select></label></div>
+<div class="field"><label>From<input name="from" placeholder="billing@example.com"></label></div>
+<div class="field"><label>Subject<input name="subject"></label></div>
+<div class="field"><label>Label to apply<input name="label" placeholder="{{.LabelPrefix}}/CFO"></label></div>
+<button class="act" type="submit">Create Gmail filter</button>
+<p class="muted">Needs <code>gmail.settings.basic</code>. The label must already exist.</p>
+</form>
+</div>
+{{end}}

@@ -1,0 +1,31 @@
+{{define "body"}}
+<div class="row spread"><h2>Routes</h2><a class="btn" href="/admin/routes/new">Add route</a></div>
+<p>First match wins unless the route says continue. A fallback runs only when nothing else matched, and it still has a filter. Drag a row, or focus it and press Alt+arrow.</p>
+{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+<div class="filter"><input type="search" data-search data-filter="#routes" placeholder="Filter routes" aria-label="Filter routes"></div>
+<div class="card flush tablewrap"><table class="table" id="routes" data-reorder="/admin/routes/reorder">
+<thead><tr><th></th><th>Name</th><th>Match</th><th>Target</th><th></th></tr></thead>
+<tbody>{{range .Routes}}<tr draggable="true" data-id="{{.ID}}">
+<td data-label=""><span class="handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td>
+<td class="primary" data-label="Name"><a class="name" href="/admin/routes/{{.ID}}"><code>{{.Name}}</code></a>{{if not .Enabled}} <span class="pill off">off</span>{{end}}{{if .Fallback}} <span class="pill warn">fallback</span>{{end}}{{if .Continue}} <span class="pill">continue</span>{{end}}</td>
+<td class="wrap" data-label="Match">{{summary .Spec}}</td>
+<td data-label="Target"><code>{{.TargetName}}</code></td>
+<td class="actions-cell"><div class="actions">
+<form method="post" action="/admin/routes/move"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="dir" value="up"><button class="act small" type="submit" aria-label="Move {{.Name}} up">Up</button></form>
+<form method="post" action="/admin/routes/move"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="dir" value="down"><button class="act small" type="submit" aria-label="Move {{.Name}} down">Down</button></form>
+<form method="post" action="/admin/routes/delete" data-confirm="Delete route {{.Name}}?" data-confirm-danger="1"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act danger small" type="submit">Delete</button></form>
+</div></td></tr>{{else}}<tr><td class="empty" colspan="5">No routes yet. The fallback you want for important mail is a route marked fallback, for example category Primary, aimed at the catch-all target.</td></tr>{{end}}</tbody>
+</table></div>
+
+<div class="card"><h3>Simulator</h3>
+<p>Runs the saved rules against the last stored messages. Body text is fetched live when the mailbox is connected and is not kept.</p>
+<form method="post" action="/admin/routes/simulate" class="row">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<label>Last <input type="number" name="n" value="{{if .PreviewN}}{{.PreviewN}}{{else}}20{{end}}" min="1" max="100" style="width:5em"> messages</label>
+<button class="btn" type="submit">Run simulator</button>
+</form>
+{{if .Previews}}<div class="tablewrap"><table class="table"><thead><tr><th>From</th><th>Subject</th><th>Would hit</th></tr></thead><tbody>
+{{range .Previews}}<tr><td data-label="From">{{.From}}</td><td class="wrap" data-label="Subject">{{.Subject}}</td><td data-label="Would hit">{{if .Route}}<span class="pill ok">{{.Route}}</span>{{else}}<span class="pill off">no route</span>{{end}}</td></tr>{{end}}
+</tbody></table></div>{{end}}
+</div>
+{{end}}

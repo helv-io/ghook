@@ -1,0 +1,13 @@
+{{define "body"}}
+<h2>Audit</h2>
+<p>Configuration changes. Secrets are not recorded.</p>
+<div class="card flush tablewrap"><table class="table">
+<thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
+<tbody>{{range .Audits}}<tr>
+<td data-label="When">{{when .At}}</td>
+<td data-label="Who">{{.Actor}}</td>
+<td data-label="Action"><code>{{.Action}}</code></td>
+<td class="wrap" data-label="Detail">{{.Detail}}</td>
+</tr>{{else}}<tr><td class="empty" colspan="4">No changes yet.</td></tr>{{end}}</tbody>
+</table></div>
+{{end}}

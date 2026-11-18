@@ -1,0 +1,38 @@
+{{define "body"}}
+<h2>Settings</h2>
+{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+<form method="post" action="/admin/settings" class="form wide">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field"><label>Label prefix<input name="label_prefix" value="{{.LabelPrefix}}"></label>
+<p class="muted">A Gmail label <code>{{.LabelPrefix}}/CFO</code> routes to the target CFO. <code>{{.LabelPrefix}}/Routed/…</code> is ignored.</p></div>
+<label class="check"><input type="checkbox" name="label_convention" value="1" {{if .LabelConvention}}checked{{end}}> Label-to-target convention</label>
+<div class="field"><label>Catch-up interval (minutes)<input type="number" name="catchup_minutes" min="1" value="{{.Catchup}}"></label>
+<p class="muted">history.list on this interval, because a notification can be dropped. Default 30.</p></div>
+<div class="field"><label>Resync window (days)<input type="number" name="resync_days" min="1" max="30" value="{{.ResyncDays}}"></label>
+<p class="muted">Used when the stored history id is too old (Gmail returns 404). Dedupe drops the overlap. Default 2.</p></div>
+<div class="field"><label>Retry attempts<input type="number" name="retry_max_attempts" min="1" value="{{.RetryAttempts}}"></label></div>
+<div class="field"><label>Retry give-up (hours)<input type="number" name="retry_max_hours" min="1" value="{{.RetryHours}}"></label></div>
+<div class="field"><label>Retry base (seconds)<input type="number" name="retry_base_seconds" min="1" value="{{.RetryBase}}"></label>
+<p class="muted">Wait doubles each failure, capped at one hour.</p></div>
+<div class="field"><label>Retention (days)<input type="number" name="retention_days" min="1" value="{{.Retention}}"></label>
+<p class="muted">Metadata only. Bodies are not stored unless you turn the switch below on, and even then only inside a delivery log you opted into.</p></div>
+<label class="check"><input type="checkbox" name="retain_bodies" value="1" {{if .RetainBodies}}checked{{end}}> Keep message bodies in the delivery log</label>
+<div class="field"><label>Display timezone<input name="timezone" value="{{.Timezone}}" placeholder="UTC" list="zones"></label>
+<datalist id="zones"><option value="UTC"><option value="America/New_York"><option value="America/Los_Angeles"><option value="Europe/London"><option value="Europe/Paris"><option value="Asia/Tokyo"></datalist></div>
+<div class="field"><label>Notify this target<select name="notify_target"><option value="0">none</option>{{range .Targets}}<option value="{{.ID}}" {{if eq .ID $.NotifyTarget}}selected{{end}}>{{.Name}}</option>{{end}}</select></label></div>
+<label class="check"><input type="checkbox" name="notify_dead" value="1" {{if .NotifyDead}}checked{{end}}> Notify on dead letters</label>
+<label class="check"><input type="checkbox" name="notify_watch" value="1" {{if .NotifyWatch}}checked{{end}}> Notify when a watch renewal fails</label>
+<button class="btn fill" type="submit">Save settings</button>
+</form>
+
+<h2>Export and import</h2>
+<div class="card"><p>YAML of routes and targets. Secrets are left out unless you set a passphrase, which seals them in the file. An import with a blank secret does not clear the one already stored.</p>
+<form method="post" action="/admin/export" class="row"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Passphrase<input type="password" name="passphrase" autocomplete="new-password"></label><button class="act" type="submit">Download YAML</button></form>
+<form method="post" action="/admin/import" enctype="multipart/form-data" class="form">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field"><label>YAML<textarea name="yaml" class="wide" rows="8"></textarea></label></div>
+<div class="field"><label>Or a file<input type="file" name="file" accept=".yaml,.yml,text/yaml"></label></div>
+<div class="field"><label>Passphrase<input type="password" name="passphrase" autocomplete="new-password"></label></div>
+<button class="btn" type="submit">Import</button>
+</form></div>
+{{end}}

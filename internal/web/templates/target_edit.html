@@ -1,0 +1,33 @@
+{{define "body"}}
+<h2>{{if .IsNew}}New target{{else}}Edit target{{end}}</h2>
+{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+<form method="post" action="/admin/targets/save" class="form wide">
+<input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Target.ID}}">
+<div class="card" data-grok><h3>Grok bot preset</h3>
+<p>Paste the webhook line as <code>URL KEY</code>. Ghook fills the URL and the bearer token.</p>
+<div class="row"><input type="text" data-grok-paste placeholder="https://bot.example.com/hook sk-..." autocomplete="off" spellcheck="false" aria-label="Grok bot URL and key"><button type="button" class="act" data-grok-apply>Fill fields</button></div></div>
+<div class="field"><label>Name<input name="name" required value="{{.Target.Name}}" placeholder="CFO"></label></div>
+<div class="field"><label>URL<input name="url" type="url" required value="{{.Target.URL}}" placeholder="https://bot.example.com/hook"></label></div>
+<div class="field"><label>Secret{{if .Target.HasSecret}} <span class="pill ok">saved</span>{{end}}<input type="password" name="secret" autocomplete="new-password" spellcheck="false" placeholder="{{if .Target.HasSecret}}Leave empty to keep the saved secret{{end}}"></label></div>
+<label class="check"><input type="checkbox" name="clear_secret" value="1"> Remove the saved secret</label>
+<div class="field"><label>Auth<select name="auth_mode">
+<option value="bearer" {{if or (eq .Target.AuthMode "") (eq .Target.AuthMode "bearer")}}selected{{end}}>Authorization: Bearer</option>
+<option value="header" {{if eq .Target.AuthMode "header"}}selected{{end}}>Custom header</option>
+<option value="hmac" {{if eq .Target.AuthMode "hmac"}}selected{{end}}>HMAC SHA-256 (X-Ghook-Signature)</option>
+</select></label></div>
+<div class="field"><label>Custom header name<input name="auth_header" value="{{.Target.AuthHeader}}" placeholder="X-Api-Key"></label></div>
+<label class="check"><input type="checkbox" name="include_body" value="1" {{if .Target.IncludeBody}}checked{{end}}> Include the plain-text body (off by default; the body is not stored)</label>
+<label class="check"><input type="checkbox" name="paused" value="1" {{if .Target.Paused}}checked{{end}}> Paused</label>
+<div class="field"><label>Quiet hours start<input name="quiet_start" value="{{.Target.QuietStart}}" placeholder="22:00"></label></div>
+<div class="field"><label>Quiet hours end<input name="quiet_end" value="{{.Target.QuietEnd}}" placeholder="07:00"></label>
+<p class="muted">Times are in the display timezone. A window that crosses midnight is fine. Mail waits until the window ends.</p></div>
+<div class="field"><label>Digest at<input name="digest_at" value="{{.Target.DigestAt}}" placeholder="08:00"></label>
+<p class="muted">Leave empty to send each message. A time batches the day's matches into one POST.</p></div>
+<div class="field"><label>Rate limit (per minute, 0 is unlimited)<input type="number" name="rate_per_minute" min="0" max="6000" value="{{.Target.RatePerMin}}"></label></div>
+<div class="field"><label>Payload template<textarea name="template" class="wide" rows="6" placeholder="Leave empty for the default JSON.">{{.Target.Template}}</textarea></label>
+<p class="muted">Go template. Fields: Source, Route, Account, MessageID, ThreadID, From, To, Cc, Subject, Date, Labels, Category, Snippet, GmailURL, DeliveryID, Body, BodyText.</p></div>
+<div class="row"><button class="btn fill" type="submit">Save</button><a class="act" href="/admin/targets">Cancel</a>
+{{if .Target.ID}}<button class="act danger" type="submit" formaction="/admin/targets/delete" formnovalidate data-confirm="Delete this target?" data-confirm-danger="1">Delete</button>{{end}}
+</div>
+</form>
+{{end}}

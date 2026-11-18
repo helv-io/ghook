@@ -1,0 +1,39 @@
+{{define "body"}}
+<h2>Health</h2>
+<div class="stats">
+{{range .Checks}}<div class="stat"><b class="{{.Class}}">{{.Value}}</b><span>{{.Label}}</span></div>{{end}}
+</div>
+{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+{{if .Setup}}<div class="card"><h3>Finish setup</h3><ol>
+{{range .Setup}}<li>{{.}}</li>{{end}}
+</ol><p><a class="btn" href="/admin/accounts">Open the setup wizard</a></p></div>{{end}}
+<div class="grid2">
+<div class="card"><h3>Mailboxes</h3>
+{{if not .Accounts}}<p class="muted">No Gmail account connected.</p>{{else}}
+<div class="tablewrap"><table class="table">
+<thead><tr><th>Account</th><th>Watch</th><th>History</th><th>Last notification</th></tr></thead>
+<tbody>{{range .Accounts}}<tr>
+<td class="primary" data-label="Account"><code>{{.Email}}</code>{{if .Disabled}} <span class="pill off">paused</span>{{end}}{{if .WatchError}}<span class="sub bad">{{.WatchError}}</span>{{end}}</td>
+<td data-label="Watch">{{if .WatchExpiry}}{{until .WatchExpiry}}{{else}}not started{{end}}</td>
+<td class="mono" data-label="History">{{if .HistoryID}}{{.HistoryID}}{{else}}—{{end}}</td>
+<td data-label="Last notification">{{rel .LastNotify}}</td>
+</tr>{{end}}</tbody></table></div>{{end}}</div>
+<div class="card"><h3>Activity</h3>
+<div class="feed" data-feed="/admin/events" aria-live="polite">
+{{range .Events}}<div class="logline"><span class="logtime">{{clock .Time}}</span><span class="logtext">{{.Text}}</span></div>{{end}}
+{{if not .Events}}<div class="logline"><span class="logtext muted">Waiting for mail.</span></div>{{end}}
+</div>
+<p class="muted">Live. Press <kbd>?</kbd> for keyboard shortcuts.</p>
+</div>
+</div>
+<h2>Routes</h2>
+<div class="card flush tablewrap"><table class="table">
+<thead><tr><th>Route</th><th>Deliveries</th></tr></thead>
+<tbody>{{range .RouteStats}}<tr><td class="primary" data-label="Route">{{.Name}}</td><td data-label="Deliveries">{{.Count}}</td></tr>{{else}}<tr><td class="empty" colspan="2">No deliveries yet.</td></tr>{{end}}</tbody>
+</table></div>
+<h2>Targets</h2>
+<div class="card flush tablewrap"><table class="table">
+<thead><tr><th>Target</th><th>Deliveries</th></tr></thead>
+<tbody>{{range .TargetStats}}<tr><td class="primary" data-label="Target"><code>{{.Name}}</code></td><td data-label="Deliveries">{{.Count}}</td></tr>{{else}}<tr><td class="empty" colspan="2">No deliveries yet.</td></tr>{{end}}</tbody>
+</table></div>
+{{end}}

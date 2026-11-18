@@ -1,0 +1,5 @@
+{{define "body"}}<div class="login"><div class="card">{{template "brandmark"}}<h2>OIDC not configured</h2>
+<p>Set <code>OIDC_ISSUER</code>, <code>OIDC_CLIENT_ID</code> and <code>OIDC_CLIENT_SECRET</code>, then restart.</p>
+<p>Redirect URL. <code>OIDC_REDIRECT_URL</code> changes it.</p>
+<button type="button" class="copybox" data-copy-text="{{.OIDCRedirect}}" aria-label="Copy the redirect URL"><code>{{.OIDCRedirect}}</code><span class="copyhint">Tap to copy</span></button>
+</div></div>{{end}}

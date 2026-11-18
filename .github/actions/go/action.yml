@@ -1,0 +1,9 @@
+name: Go toolchain
+description: Installs the Go release named in go.mod and caches modules.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+        cache: true

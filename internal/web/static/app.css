@@ -1,0 +1,509 @@
+/* ghook admin: one stylesheet, shared components only (no page-specific rules).
+   The visual system matches skgate: dark, thin lines, square corners, the same type and tokens.
+   Components: .quick .login .brandmark .choices .card .table .tablewrap .primary .status .actions-cell .actions-th .copybox .copyhint .codehost .gated .helper-opener .si-status .tip .pill .chip .code .actions .act .toggle .btn .fill .form .field .pairs .pair .group .toast .modal .muted .row .dialog-head .dialog-body .reveal .dsec .danger-zone .action-groups .filter .logbar .logview .logline .logdivider .logjump .desc .desc-line .split .menu .inline .nav-btn .nav-panel .here
+   Dark, thin lines, square corners. Sans-serif text; monospace only for aliases, URLs, tokens and code. */
+:root{--bg:#0e0f11;--panel:#121417;--hover:#171a1e;--fg:#d6d8db;--dim:#8b9097;--line:#2c3036;--line2:#22262b;
+--acc:#7fb8ff;--bad:#ff8a80;--ok:#8fd694;--warn:#e6c07b;--tint-url:rgba(230,192,123,.075);--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+--bad-line:#5a3532;--ok-line:#2f4a33;--warn-line:#57492f;--well:#0c0d0f;--btn:#131518;--bad-bg:#211514;--raised:#171a1f;--raised-hover:#1c2128;--press:#1b2c40;
+--kw:#c9a7ff;--code-size:13px;--code-rows:8;--z-sticky:5;--z-header:30;--z-menu:40;--z-toast:2147483647;--sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--pad:8px 12px;--form-w:620px}
+*{box-sizing:border-box;border-radius:0}
+/* the scrollbar keeps its room, so the page does not shift sideways when a dialog hides it */
+html{scrollbar-gutter:stable}
+/* a solo page has no dialog to open and its card is centered on the window, gutter or not */
+html:has(main.solo){scrollbar-gutter:auto}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans)}
+a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
+main{max-width:1200px;margin:0 auto;padding:16px clamp(12px,2.5vw,32px) 40px}
+h2{font-size:13px;font-weight:600;margin:22px 0 8px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim)}
+/* an alias in a heading keeps its case: aliases are case-sensitive */
+h2 code{text-transform:none;letter-spacing:0}
+p{margin:6px 0}
+ul{margin:6px 0;padding-left:20px}li{margin:3px 0}
+details summary{cursor:pointer;margin:8px 0;list-style:none}
+details summary::-webkit-details-marker{display:none}
+/* a summary has no marker (no icons): a dotted underline says it opens, and it turns accent-coloured on hover and when open.
+   Only things that open get it: a details block always has content to show, and a .desc-line gets .expands from app.js only
+   while its text is cut off. Nothing else is underlined like this. */
+details:not(.verbgroup)>summary,.expands{text-decoration:underline dotted var(--dim);text-underline-offset:3px}
+details:not(.verbgroup)>summary:hover,details[open]:not(.verbgroup)>summary,.expands:hover,.expands.open{text-decoration-color:var(--acc)}
+
+/* top bar: always sticky, opaque, above the page and below menus, dialogs (top layer) and toasts. app.js keeps
+   --header-h at its height so anchors and focus scrolling land below it. On phones it is one row (brand, current
+   page, Menu) and the links, version, user and logout fold into a panel under it. */
+html{scroll-padding-top:var(--header-h,44px)}
+header{position:sticky;top:0;z-index:var(--z-header);border-bottom:1px solid var(--line);display:flex;align-items:stretch;flex-wrap:wrap;background:var(--panel)}
+header .here,header .nav-btn{display:none}
+.nav-panel{display:contents}
+header .brand{display:flex;align-items:center;gap:8px;padding:9px 14px;border-right:1px solid var(--line);font-weight:700;letter-spacing:.04em}
+header .brand img{display:block}
+header a{padding:9px 14px;color:var(--dim);border-right:1px solid var(--line);white-space:nowrap}
+header a:hover{color:var(--fg);background:var(--hover);text-decoration:none}
+header a.on{color:var(--fg);background:var(--bg);box-shadow:inset 0 -2px 0 var(--acc)}
+header form{display:flex;margin:0}
+header .ver,header .who{align-self:center;padding:0 10px;font-size:12px;white-space:nowrap;color:var(--dim)}
+header .ver{margin-left:auto;font-family:var(--mono)}
+header a.ver{padding:0 10px;border-right:0}
+header a.ver,header a.ver:hover{background:none;color:var(--dim);text-decoration:none;cursor:pointer}
+header a.ver.new,header a.ver.new:hover{color:var(--warn)}
+header :focus-visible{outline-offset:-2px}
+header .who{color:var(--fg);opacity:.85;min-width:0;overflow:hidden;text-overflow:ellipsis}
+header .act{border:0;border-left:1px solid var(--line);height:100%;padding:9px 14px;background:none}
+header form:last-child{margin-right:clamp(12px,2.5vw,32px)}
+
+/* card = the bordered section */
+.card{border:1px solid var(--line);background:var(--panel);padding:12px 14px;margin:0 0 12px}
+.card>:first-child{margin-top:0}.card>:last-child{margin-bottom:0}
+.card.flush{padding:0}
+
+/* table: header row small caps + muted, thin dividers, padded cells, one line per row */
+.tablewrap{overflow-x:auto;max-width:100%}
+.table{border-collapse:collapse;width:100%}
+.table th,.table td{padding:8px 12px;text-align:left;vertical-align:middle;border:0;border-bottom:1px solid var(--line2);height:44px}
+.table tr:last-child td,.table tr:last-child th{border-bottom:0}
+.table thead th{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);white-space:nowrap;background:var(--bg);border-bottom:1px solid var(--line);height:34px}
+.table thead th.actions-th{width:1%;text-align:right}
+.table td.actions-cell{text-align:right}
+.table td.actions-cell .actions{justify-content:flex-end}
+.table tbody tr:hover td,.table tbody tr[data-current] td{background:var(--hover)}
+/* a row marked geturl (a key that may be sent as ?key=): the shared warm tint, text colors untouched */
+.table tbody tr.geturl,.table tbody tr.geturl:hover td{background-color:var(--tint-url)}
+.table td{white-space:nowrap}
+.table td.wrap{white-space:normal;overflow-wrap:anywhere;min-width:160px}
+/* primary: the name; a long one wraps instead of pushing the row's actions out of view */
+.table td.primary{white-space:normal;overflow-wrap:anywhere;min-width:12ch}
+.table td.primary code{white-space:normal;overflow-wrap:anywhere;overflow-x:visible}
+/* split: names and descriptions, about 30/70 (names wrap, the description gets the rest). A trailing actions column stays as wide as its buttons. Phones get cards. */
+@media (min-width:721px){.table.split th:first-child,.table.split td.primary{width:30%}.table.split td.wrap{width:70%}.table.split th.actions-th,.table.split td.actions-cell{width:1%}}
+/* trunc: the flexible column. max-width:0 lets the cell shrink to the space left (no horizontal
+   scrollbar); long values end in an ellipsis and carry the full text in title. */
+.table td.trunc{width:32%;max-width:0;overflow:hidden;text-overflow:ellipsis}
+.table td.trunc .chip{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.table td.trunc .sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.table.kv th{width:1%;white-space:nowrap;text-transform:none;letter-spacing:0;font-size:14px;font-weight:400;color:var(--dim);background:none;height:auto;border-bottom:1px solid var(--line2)}
+.table.kv td{white-space:normal;overflow-wrap:anywhere}
+.empty{color:var(--dim);text-align:center}
+
+/* code / mono */
+code,pre,.code,.mono{font-family:var(--mono);font-size:13px}
+code,.code{background:var(--well);border:1px solid var(--line);padding:1px 6px;white-space:nowrap;display:inline-block;max-width:100%;overflow-x:auto;vertical-align:middle}
+/* copybox: a value that copies itself when pressed. A little lighter than a code box, a hint line under the value,
+   and the same hover, press and focus states as other buttons. The value wraps; nothing is cut off. */
+.copybox{display:block;width:100%;text-align:left;background:var(--raised);border:1px solid var(--line);padding:8px 12px;min-height:44px;color:var(--fg);line-height:1.4;white-space:normal;cursor:pointer}
+.copybox+.muted{display:block;margin-top:6px}
+.copybox code{display:block;background:none;border:0;padding:0;white-space:normal;overflow-wrap:anywhere;overflow-x:visible;max-width:100%}
+.copybox.big code{font-size:20px;letter-spacing:.2em}
+.copybox .copyhint{display:block;margin-top:2px;font-size:12px;color:var(--dim)}
+.copybox:hover,.copybox:focus-visible{border-color:var(--acc);background:var(--raised-hover);color:var(--fg)}
+.copybox:hover .copyhint,.copybox:focus-visible .copyhint{color:var(--acc)}
+.copybox:active{background:var(--press);border-color:var(--acc)}
+pre{background:var(--well);border:1px solid var(--line);padding:8px 10px;overflow:auto;white-space:pre-wrap;margin:6px 0}
+.trunc code,.trunc .code,.trunc .mono{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.big{font-size:20px;letter-spacing:.2em;padding:6px 12px}
+
+/* the MCP helper model opener and its dialog template: no box of its own, the button sits in the row like its neighbors */
+.helper-opener{display:contents}
+
+/* pills and chips */
+.tip[title]{cursor:help}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:1px 9px;border:1px solid var(--line);font-size:12px;line-height:20px;white-space:nowrap;color:var(--dim)}
+.pill.ok{color:var(--ok);border-color:var(--ok-line)}.pill.bad{color:var(--bad);border-color:var(--bad-line)}.pill.warn{color:var(--warn);border-color:var(--warn-line)}
+.pill.off{color:var(--dim)}
+/* a process pill is the way to the process page. Running is a green chip; other states stay clear. */
+a.pill{cursor:pointer;text-decoration:none}
+a.pill:hover{text-decoration:none;border-color:var(--fg)}
+a.pill.ok{color:var(--ok);background:#1a3d2c;border-color:var(--ok)}
+a.pill.ok:hover{background:#21563a;border-color:var(--ok);color:#d7f5dc;text-decoration:none}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:1px 8px;border:1px solid var(--line);background:var(--well);font-size:12px;line-height:20px;white-space:nowrap;vertical-align:middle}
+.chip .mono{color:var(--dim)}
+.chip.accent{color:var(--acc);border-color:var(--acc)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.dim,.muted{color:var(--dim)}.nw{white-space:nowrap}
+.sub{display:block;font-size:12px;color:var(--dim);margin-top:2px;white-space:normal}
+
+/* actions: one row of subtle button-like links, all the same colors */
+.actions{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;white-space:nowrap}
+.actions form{margin:0;display:inline-flex}
+/* row actions: every button in a table's action cell has the same minimum width and centered text, so the
+   buttons of one column line up across rows whatever their label (edit, test, process, detect, delete) */
+.table .actions .act{min-width:5.5em;text-align:center}
+.act,button,input[type=submit]{font:inherit;font-size:14px;color:var(--fg);background:var(--btn);border:1px solid var(--line);padding:3px 10px;line-height:20px;cursor:pointer;text-decoration:none;display:inline-block;white-space:nowrap}
+.act:disabled,button:disabled,.btn:disabled{opacity:.45;cursor:not-allowed}
+.act:hover,button:hover{border-color:var(--acc);color:var(--acc);text-decoration:none;background:var(--hover)}
+/* a pill that opens a dialog: same chip, button chrome reset so the general button rule does not win */
+button.pill{display:inline-flex;font-size:12px;line-height:20px;padding:1px 9px;background:transparent;color:var(--dim);cursor:pointer}
+button.pill:hover{border-color:var(--fg);color:var(--dim);background:transparent}
+button.pill.ok{color:var(--ok);background:#1a3d2c;border-color:var(--ok)}
+button.pill.ok:hover{background:#21563a;border-color:var(--ok);color:#d7f5dc}
+button.pill.warn{color:var(--warn);border-color:var(--warn-line)}
+button.pill.warn:hover{color:var(--warn);border-color:var(--warn);background:transparent}
+button.pill.bad{color:var(--bad);border-color:var(--bad-line)}
+button.pill.bad:hover{color:var(--bad);border-color:var(--bad);background:transparent}
+button.pill.off:hover{color:var(--dim);border-color:var(--fg)}
+/* a running helper or update keeps its size: the bar is drawn inside the button, along the bottom edge */
+button.running{position:relative;overflow:hidden}
+button.running::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:currentColor;animation:si-bar 1s linear infinite;pointer-events:none}
+@keyframes si-bar{0%{transform:scaleX(.15);transform-origin:left}50%{transform:scaleX(1);transform-origin:left}51%{transform:scaleX(1);transform-origin:right}100%{transform:scaleX(.15);transform-origin:right}}
+@media (prefers-reduced-motion:reduce){button.running::after{animation:none;opacity:.85}}
+td.status form{display:inline-flex;margin:0;vertical-align:middle}
+/* the SI helper status line (si_status): its own line under the helper's buttons, with that line's room kept while
+   empty, so a stage, a result or an error never moves a button. Long text is cut; the whole text is the tooltip. */
+.si-status{display:block;height:20px;line-height:20px;margin:-4px 0 8px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si-status.bad{color:var(--bad)}
+[data-prefix-hint].bad{color:var(--bad)}
+.act.accent,button.accent{color:var(--acc);border-color:var(--acc)}
+/* danger: red at rest (touch screens have no hover), brighter border and a red wash on hover */
+.act.danger,button.danger{color:var(--bad);border-color:var(--bad-line)}
+.act.danger:hover,button.danger:hover{border-color:var(--bad);color:var(--bad);background:var(--bad-bg)}
+.act.small,button.small{padding:1px 8px;font-size:12px}
+.act.plain{border:0;background:none;padding:0;color:var(--acc)}
+/* toggle: a switch. The button is role=switch (aria-checked), a track with a knob (on: green, knob right; off:
+   neutral, knob left) beside its label. A disabled switch is dimmed, shows no pointer and does not react to hover. */
+.act.toggle{display:inline-flex;align-items:center;gap:8px;color:var(--dim);background:var(--btn)}
+.act.toggle::before{content:"";flex:0 0 auto;width:28px;height:16px;border:1px solid currentColor;background:linear-gradient(currentColor,currentColor) no-repeat left 2px center/10px 10px}
+.act.toggle.on{color:var(--ok);border-color:var(--ok-line);background:#132016}
+.act.toggle.on::before{background-position:right 2px center}
+.act.toggle:hover{color:var(--fg);border-color:var(--acc)}
+.act.toggle.on:hover{color:var(--ok);border-color:var(--ok)}
+.act.toggle:disabled,.act.toggle:disabled:hover{opacity:.45;cursor:not-allowed;color:var(--dim);border-color:var(--line);background:var(--btn)}
+.act.toggle:disabled::before{background-position:left 2px center}
+/* A switch with both labels (data-on, data-off) is as wide as the longer one, so flipping it moves nothing: the
+   other label sits under the shown one, hidden and flat. */
+.act.toggle[data-on][data-off]{display:inline-grid;grid-template-columns:auto auto;column-gap:8px;row-gap:0;align-items:center;justify-items:start}
+.act.toggle[data-on][data-off]::after{content:attr(data-on);grid-area:2/2;height:0;overflow:hidden;visibility:hidden}
+.act.toggle[data-on][data-off].on::after{content:attr(data-off)}
+/* action groups: the buttons of a screen in labelled groups (lifecycle, maintenance, links, danger); the danger group
+   sits apart on the right, and under 720px the groups stack */
+.action-groups{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:flex-start;margin:0 0 12px}
+.action-group{min-width:0}
+.group-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 4px}
+.action-group.danger-group{margin-left:auto;padding-left:20px;border-left:1px solid var(--bad-line)}
+.action-group.danger-group .group-label{color:var(--bad)}
+/* menu: the More button of a row and the list it opens. The list is fixed to the window (placed by app.js under the
+   button), so a table that scrolls sideways cannot clip it. Items are the .act of the row, without their frames. */
+.menu{display:inline-flex}
+.menu .menu-btn{min-width:0;padding:3px 12px;font-weight:600}
+.menu .menu-btn[aria-expanded=true]{border-color:var(--acc);color:var(--acc)}
+.menu-list{position:fixed;z-index:var(--z-menu);min-width:11em;max-width:calc(100vw - 16px);padding:4px 0;background:var(--panel);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.menu-list form{display:block;margin:0}
+.menu .menu-list .act{display:block;width:100%;min-width:0;text-align:left;border:0;background:none;padding:7px 14px;line-height:22px}
+.menu .menu-list .act:hover,.menu .menu-list .act:focus-visible{background:var(--hover);color:var(--acc)}
+.menu .menu-list .act.danger,.menu .menu-list .act.danger:hover{color:var(--bad)}
+.menu .menu-list .act.danger:hover,.menu .menu-list .act.danger:focus-visible{background:var(--bad-bg)}
+/* a name that opens its details */
+/* the whole cell height is the tap area of a name that opens its details */
+a.name{color:inherit;display:inline-flex;align-items:center;min-height:44px}
+a.name:hover{text-decoration:none}
+a.name:hover code{border-color:var(--acc);color:var(--acc)}
+/* primary */
+.btn,a.btn{display:inline-block;padding:5px 16px;border:1px solid var(--acc);background:#14202e;color:var(--acc);font:inherit;font-size:13px;text-decoration:none;cursor:pointer}
+.btn:hover,a.btn:hover{background:var(--press);color:#fff;text-decoration:none}
+/* fill: the one primary choice of a screen (Approve, Allow); solid accent, dark text */
+.btn.fill,a.btn.fill{background:var(--acc);color:#0b1117;font-weight:600}
+.btn.fill:hover,a.btn.fill:hover{background:#a6cdff;color:#0b1117}
+
+.offscreen{position:fixed;left:-9999px;top:0;opacity:0}
+
+/* forms: a .form is one column of width --form-w (.form.wide: 900px). Controls have no width of their own:
+   they fill their container (width:100%, border-box), and nested blocks (.group, details) only move the
+   left edge, so inputs, selects, textareas and pairs rows of every depth end at the same right edge. */
+.form{max-width:var(--form-w)}
+.form.wide{--form-w:900px}
+/* in a dialog the form spans the dialog's width, like the tables above it */
+.dialog-body .form{max-width:none}
+.field{margin:0 0 12px}
+/* quick: a row of preset buttons under a field (expiration); finger-sized on phones */
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.quick .act[aria-pressed=true]{color:var(--acc);border-color:var(--acc);background:#14202e}
+.field>p{margin:6px 0 0}
+.field>label,label,.field>.label{display:block;margin:10px 0 4px;color:var(--dim);font-size:14px}
+.field>label:first-child,.field>.label:first-child{margin-top:0}
+label.check{display:inline-flex;align-items:center;gap:6px;margin:0 16px 0 0;color:var(--fg)}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--well);border:1px solid var(--line);padding:5px 8px}
+input[type=text],input[type=password],input[type=url],input[type=search],input[type=number],textarea,select{width:100%;display:block}
+/* focus: one visible ring for everything the keyboard reaches (fields, quick buttons, links, menu items); a field
+   also takes the accent border. Inside a menu or the nav panel the ring sits inside the item, so nothing clips it. */
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+input:focus,select:focus,textarea:focus{border-color:var(--acc)}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline-offset:0}
+input[aria-invalid=true]:focus-visible,textarea[aria-invalid=true]:focus-visible{outline-color:var(--bad)}
+.menu-list :focus-visible,.nav-panel :focus-visible{outline-offset:-2px}
+input[aria-invalid=true],input[aria-invalid=true]:focus,textarea[aria-invalid=true],textarea[aria-invalid=true]:focus{border-color:var(--bad)}
+input[type=checkbox]{width:auto;accent-color:var(--acc);margin:0}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
+/* device sign-in: the code and the address on the left, the QR on the right, centered with that block */
+.device{display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:8px 18px;align-items:center;margin-top:8px}
+.device-copy{min-width:0}
+.device-copy p{margin:0 0 8px}
+.device-copy a{overflow-wrap:anywhere}
+.device-qr{justify-self:end}
+.qr{display:block;width:148px;height:148px;background:#fff}
+@media (max-width:720px){.device{grid-template-columns:minmax(0,1fr)}.device-qr{justify-self:center}}
+/* controls inside a row share its width instead of each taking all of it */
+.row>input:not([type=checkbox]),.row>select{width:auto;flex:1 1 140px;min-width:0}
+textarea{resize:vertical;min-height:64px}
+textarea.wide{min-height:180px;font-family:var(--mono);font-size:13px}
+/* codehost: the CodeMirror editor that replaces a textarea marked data-code (static/codemirror.js, built from tools/codemirror).
+   The textarea stays the form field, kept in step but out of sight (code-src). The editor takes its colours
+   from the variables of :root and its size from --code-size: 16px on touch screens, because smaller text makes phones zoom
+   in on focus. CodeMirror adds its own rules through adoptedStyleSheets, so the CSP needs no change. */
+.codehost{margin:0}
+textarea.code-src{display:none}
+/* pairs: a list of name/value inputs (environment, headers); the value column is masked for stored secrets */
+.pairs-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.pair{display:grid;grid-template-columns:minmax(110px,1fr) minmax(150px,2fr) 64px;gap:6px;align-items:center}
+.pair input{max-width:none;width:100%}
+.pair.single{grid-template-columns:minmax(150px,1fr) 64px}
+/* a row without a Delete button lets its last input take that column, so every row ends at the same edge */
+.pair>input:last-child{grid-column:span 2}
+.pair>input:only-child{grid-column:1/-1}
+/* group: fields that apply to one upstream kind; the form script shows the group of the selected kind */
+.group{border-left:2px solid var(--line);padding-left:12px;margin:0 0 12px}
+[hidden]{display:none!important}
+
+/* toasts: fixed at the bottom right, one shared component for every notification; app.js expires and dismisses them */
+.toasts{position:fixed;bottom:14px;right:14px;z-index:var(--z-toast);display:flex;flex-direction:column;gap:8px;max-width:min(420px,calc(100vw - 28px))}
+.toast{border:1px solid var(--line);background:var(--panel);padding:9px 14px;cursor:pointer;box-shadow:0 4px 16px #0009;overflow-wrap:anywhere;transition:opacity .25s}
+.toast.ok{border-color:var(--ok-line);color:var(--ok)}
+.toast.bad{border-color:var(--bad-line);color:var(--bad)}
+.toast.warn{border-color:var(--warn-line);color:var(--warn)}
+.toast.gone{opacity:0}
+.toasts[popover]{inset:auto 14px 14px auto;margin:0;padding:0;border:0;background:none;color:inherit;overflow:visible}
+/* modal: the one shared dialog, confirmation or content (native <dialog>; Escape and focus handling come with it) */
+.modal{border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:16px 18px;width:min(440px,calc(100vw - 28px));box-shadow:0 8px 32px #000c}
+.modal::backdrop{background:#000a}
+.modal h3{margin:0;font-size:14px;font-weight:600}
+.modal>p{margin:0 0 14px;color:var(--dim);overflow-wrap:anywhere}
+.modal .actions[data-modal-actions]{justify-content:flex-start}
+.act.confirm-danger{color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg)}
+.act.confirm-danger:hover{color:#fff;border-color:var(--bad)}
+
+/* dialog: the same .modal element with room for content (provider details) */
+.modal.wide{width:min(760px,calc(100vw - 28px));max-height:calc(100vh - 40px)}
+.dialog-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 8px}
+.dialog-head h3{margin:0}
+.dialog-body{margin-top:4px}
+.dialog-body h4,.card h3{margin:16px 0 6px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.card h3{margin:0;font-size:15px;text-transform:none;letter-spacing:0;color:var(--fg)}
+.row.spread{justify-content:space-between;margin:0 0 8px}
+/* danger zone: the irreversible actions of a dialog, framed in red below the form's Save and apart from it */
+.danger-zone{border:1px solid var(--bad-line);padding:10px 14px 14px;margin:20px 0 4px}
+.dialog-body .danger-zone h4{margin:0 0 6px;color:var(--bad)}
+.danger-zone .actions{margin-top:10px}
+/* dialog sections: each one saves on its own; the heading shows a chip while it holds unsaved edits */
+.dsec{display:block;padding:0 0 12px;border-top:1px solid var(--line2)}
+.dsec:first-child{border-top:0}
+.dsec>summary{margin:12px 0 4px;color:var(--dim)}
+.dsec>h4:first-child{margin-top:14px}
+.dsec h4 .chip{margin-left:8px;text-transform:none;letter-spacing:0}
+.row.bottom{align-items:flex-end}
+.row.bottom>.field{flex:1 1 160px;margin:0}
+
+/* logview: a process's output. The bar above filters it; the view scrolls and follows the live stream, tinting stdout, stderr and
+   skgate's own notes differently (the source is also written out). A divider marks where a run starts. */
+.logbar{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin:0 0 8px}
+.logbar input[type=search]{flex:1 1 220px;min-width:0;max-width:var(--form-w)}
+.logwrap{position:relative}
+.logview{max-height:70vh;overflow:auto;background:var(--well);border:1px solid var(--line);font-family:var(--mono);font-size:13px;line-height:1.5}
+.logline{display:flex;gap:10px;padding:1px 10px;border-left:3px solid transparent}
+.logline[hidden],.logdivider[hidden]{display:none}
+.logline[data-src=out]{background:rgba(127,184,255,.07)}
+.logline[data-src=err]{background:rgba(255,138,128,.09)}
+.logline[data-src=sys]{color:var(--dim);font-style:italic}
+.logline[data-src=git],.logline[data-src=install]{color:var(--dim)}
+.logline[data-lvl=error]{border-left-color:var(--bad)}
+.logline[data-lvl=warn]{border-left-color:var(--warn)}
+.logtime{flex:0 0 auto;color:var(--dim)}
+.logsrc{flex:0 0 4.5em;color:var(--dim)}
+.logtext{flex:1 1 auto;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.logdivider{display:flex;gap:10px;align-items:center;padding:3px 10px;margin:4px 0;font-size:12px;color:var(--acc);border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:#101216}
+.logjump{position:absolute;right:18px;bottom:14px}
+/* filter: a search field above a table and how many rows it leaves */
+.filter{display:flex;gap:12px;align-items:center;margin:0 0 8px;max-width:var(--form-w)}
+.filter input{flex:1 1 auto;min-width:0}
+/* desc: a description on one line (ellipsis); opening it shows the whole text */
+details.desc{min-width:0;flex:1 1 0}
+details.desc>summary{display:block;margin:0;padding:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;color:var(--fg);list-style:none}
+details.desc[open]>summary{white-space:normal;overflow:visible}
+details.desc>p{margin:4px 0 0 1.2em;color:var(--dim);white-space:pre-line}
+.desc-line{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)}
+.desc-line.expands{cursor:pointer}
+.desc-line.open{white-space:normal;overflow:visible}
+/* suggest: output area of the configuration helper */
+.suggest-out{margin:0 0 12px}
+.suggest-out ul{margin:6px 0}
+/* a warning line leads with an icon and the warning colour; the notes are a folded details block */
+.suggest-out ul{list-style:none;padding-left:0}
+.suggest-out li.warn{color:var(--warn);padding-left:0}
+.suggest-out details{margin:6px 0}
+.suggest-out details ul{list-style:disc;padding-left:20px}
+/* callout: a notice that must not be missed, colored by level (ok, warn, bad). The tool-count notice of an OpenAPI
+   upstream is one; its counter (toolcount) is the same level in a sticky bar under the top bar. */
+.callout{border:1px solid var(--line);border-left-width:4px;background:var(--panel);padding:9px 14px;margin:0 0 12px;overflow-wrap:anywhere}
+.callout.ok{border-color:var(--ok-line)}.callout.warn{border-color:var(--warn-line);background:#1a1812}.callout.bad{border-color:var(--bad-line);background:var(--bad-bg)}
+.toolcount{position:sticky;top:var(--header-h,44px);z-index:var(--z-sticky);display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;border:1px solid var(--line);background:var(--panel);padding:6px 12px;margin:0 0 12px}
+.toolcount .btn{margin-left:auto}
+.toolcount-n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.toolcount.ok{color:var(--ok);border-color:var(--ok-line)}.toolcount.warn{color:var(--warn);border-color:var(--warn-line)}.toolcount.bad{color:var(--bad);border-color:var(--bad-line)}
+/* verbgroup: the tools of one HTTP verb, a details block with an all-on/off switch in its heading. tool: one row. */
+.verbgroup{border:1px solid var(--line);background:var(--panel);margin:0 0 12px}
+.verbgroup>summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0;padding:8px 12px}
+.verbgroup>summary label.check{margin:0}
+.verbgroup>summary:hover{background:var(--hover)}
+.verb{font-family:var(--mono);font-size:12px;font-weight:700;padding:1px 8px;border:1px solid var(--line);background:var(--well);color:var(--dim)}
+.verb.GET{color:var(--ok);border-color:var(--ok-line)}.verb.POST,.verb.PUT,.verb.PATCH{color:var(--warn);border-color:var(--warn-line)}.verb.DELETE{color:var(--bad);border-color:var(--bad-line)}
+.tool{border-top:1px solid var(--line2);padding:8px 12px}
+.tool.skipped{opacity:.6}
+.tool-head label.check{display:flex;margin:0;min-width:0}
+.tool-path{white-space:normal;overflow:visible;overflow-wrap:anywhere;word-break:break-all}
+.tool-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:0 10px;margin-top:4px}
+.tool-fields label{margin:6px 0 2px;font-size:12px}
+@media (max-width:720px){.tool-fields{grid-template-columns:minmax(0,1fr)}}
+/* oa-out: the result of checking an OpenAPI description, and diff: the repair the assistant proposes (before and after) */
+.gated{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.oa-out{margin:0 0 12px}
+.oa-out ul,.diff ul{list-style:none;padding-left:0;margin:6px 0}
+.oa-out li{overflow-wrap:anywhere;margin:2px 0}
+.diff li{border-top:1px solid var(--line2);padding:6px 0;overflow-wrap:anywhere}
+.diff .del,.diff .add{font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all;padding:1px 6px}
+.diff .del{color:var(--bad);background:var(--bad-bg)}.diff .add{color:var(--ok);background:#131f15}
+.reveal{animation:reveal-in .3s ease-out}
+@keyframes reveal-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.reveal{animation:none}}
+
+/* solo pages (sign-in states, consent): one card, centered both ways; the page grows when the card is taller than the window */
+main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.login{width:min(460px,100%);margin:0}
+.brandmark{display:flex;align-items:center;gap:8px;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid var(--line2);font-weight:700;letter-spacing:.04em}
+.login .card{margin:0;padding:22px 22px 24px}
+.login .card h2{margin:0 0 10px}
+.solo-name{margin:0 0 16px;font-size:24px;font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.login .table.kv{margin:0}
+.login .table.kv th,.login .table.kv td{height:auto;padding:8px 0}
+.login .table.kv th{width:36%;white-space:normal}
+.login .table.kv tr:first-child th,.login .table.kv tr:first-child td{padding-top:0}
+/* choices: the decision buttons, side by side (secondary first), stacked with the primary on top on phones */
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+.choices:has(>:only-child){grid-template-columns:1fr}
+.choices .btn,.choices .act{min-height:48px;display:flex;align-items:center;justify-content:center;font-size:15px;padding:8px 16px}
+@media (max-width:720px){.choices{grid-template-columns:1fr}.choices>:last-child{order:-1}}
+@media (max-width:720px){.quick .act{flex:1 1 30%;min-height:44px;text-align:center}}
+
+/* kv tables and details: long values wrap instead of widening the page */
+.table.kv code,.modal code{white-space:normal;overflow-wrap:anywhere;overflow-x:visible}
+.modal{max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden}
+.modal .tablewrap{overflow-x:visible}
+
+/* low-priority columns drop out on narrower windows instead of forcing a horizontal scrollbar */
+@media (min-width:801px){.table td.wrap>details.desc,.table td.wrap>.desc-line{width:0;min-width:100%}}
+@media (min-width:801px) and (max-width:1100px){.table th,.table td{padding-left:8px;padding-right:8px}}
+@media (max-width:800px){.table td.trunc{width:auto}}
+
+/* Phones: every list table (.table without .kv) becomes a stack of cards, from markup alone.
+   A cell carries data-label (its column name, shown beside the value). Cell roles:
+   .primary = the card title (no label), .status = pills beside the title (no label),
+   .actions-cell = the button row at the bottom (no label). */
+@media (max-width:720px){
+  main{padding:10px 10px 32px}
+  .tablewrap{overflow:visible}
+  .card.flush.tablewrap{border:0;background:none}
+  .table:not(.kv) thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .table:not(.kv),.table:not(.kv) tbody{display:block;width:100%}
+  .table:not(.kv) tr{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:0 0 10px;padding:14px;border:1px solid var(--line);background:var(--panel)}
+  .table:not(.kv) tbody tr:hover td{background:none}
+  .table:not(.kv) tbody tr[data-current],.table:not(.kv) tbody tr[data-current] td{background:var(--hover)}
+  .table:not(.kv) tbody tr.geturl{background:linear-gradient(var(--tint-url),var(--tint-url)),var(--panel)}
+  .table:not(.kv) td{display:flex;align-items:center;gap:10px;flex:1 1 100%;min-width:0;height:auto;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;overflow:visible;text-overflow:clip;width:auto;max-width:100%}
+  .table:not(.kv) td[data-label]::before{content:attr(data-label);flex:0 0 30%;max-width:30%;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+  .table:not(.kv) td.primary,.table:not(.kv) td.status,.table:not(.kv) td.actions-cell{gap:6px}
+  .table:not(.kv) td.primary::before,.table:not(.kv) td.status::before,.table:not(.kv) td.actions-cell::before{content:none}
+  .table:not(.kv) td.primary{flex:1 1 60%;font-size:16px;font-weight:600;line-height:1.3;order:-2;overflow-wrap:anywhere}
+  .table:not(.kv) td.status{flex:0 1 auto;order:-1;flex-wrap:wrap;justify-content:flex-end}
+  .table:not(.kv) td.actions-cell{order:9;margin-top:6px;padding-top:12px;border-top:1px solid var(--line2)}
+  /* inline: short facts (a type, a toggle) share a line, without their labels: a card stays a few lines tall */
+  .table:not(.kv) td.inline{flex:0 1 auto}
+  .table:not(.kv) td.inline[data-label]::before{content:none}
+  .table:not(.kv) td.inline .act.toggle{min-width:0}
+  .table:not(.kv) td.actions-cell .actions>.act{flex:1 1 0;min-width:0}
+  .table:not(.kv) td.empty{justify-content:center;flex-basis:100%}
+  .table:not(.kv) td.empty::before{content:none}
+  .table:not(.kv) code,.table:not(.kv) .code{white-space:normal;overflow-wrap:anywhere;overflow-x:visible;max-width:100%}
+  .table:not(.kv) td.trunc .chip{max-width:100%;white-space:normal}
+  /* buttons: large tap targets, two per line, the row wraps */
+  .actions{flex-wrap:wrap;gap:8px;width:100%;white-space:normal}
+  .actions form{flex:1 1 40%;display:flex}
+  .actions form .act,.actions form button{flex:1}
+  .table .actions .act,.actions .act{flex:1 1 40%;min-width:0;min-height:44px;display:inline-flex;align-items:center;justify-content:center;padding:6px 12px}
+  a.btn,a.act{display:inline-flex;align-items:center;justify-content:center}
+  /* touch targets: every control is at least 44px tall and wide, one shared size (the sweep measures them) */
+  .act,button,input[type=submit],.act.small,button.small,.btn,a.btn{min-height:44px;min-width:44px}
+  .table:not(.kv) td .act.toggle{min-width:8em;justify-content:flex-start}
+  input,select,textarea{min-height:44px}
+  input[type=checkbox]{min-height:0}
+  label.check{min-height:44px}
+  summary{min-height:44px;padding:10px 0;margin:0}
+  a.name{min-width:44px}
+  /* top bar: one row, the rest in the panel */
+  header{flex-wrap:nowrap;align-items:center;min-height:52px}
+  header .brand{flex:0 0 auto;border-right:0;padding:4px 10px 4px 12px}
+  header .here{display:block;flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
+  header .nav-btn{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-width:72px;min-height:44px;margin:0 4px 0 0;border:1px solid var(--line);padding:0 14px}
+  header .nav-btn[aria-expanded=true]{border-color:var(--acc);color:var(--acc)}
+  .nav-panel{display:flex;flex-direction:column;position:absolute;top:100%;left:0;right:0;max-height:calc(100vh - 52px);overflow-y:auto;background:var(--panel);border-bottom:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.5)}
+  header[data-collapsed] .nav-panel{display:none}
+  .nav-panel a{display:flex;align-items:center;min-height:44px;padding:0 16px;text-align:left;border-right:0;border-bottom:1px solid var(--line2)}
+  .nav-panel a.on{box-shadow:inset 3px 0 0 var(--acc)}
+  .nav-panel a.ver{margin-left:0;padding:0 16px;align-self:stretch}
+  .nav-panel .who{align-self:stretch;display:flex;align-items:center;min-height:44px;padding:0 16px;border-bottom:1px solid var(--line2)}
+  .nav-panel form{display:block;margin:0}
+  .nav-panel form .act{display:flex;align-items:center;width:100%;min-height:44px;padding:0 16px;border:0}
+  .toasts{left:10px;right:10px;bottom:10px;max-width:none}
+  .toasts[popover]{inset:auto 10px 10px 10px}
+  .table.kv th{width:36%;white-space:normal}
+  /* name/value rows: the name on its own line, value and Delete below */
+  .pair{grid-template-columns:minmax(0,1fr) auto}
+  .pair>input:first-child{grid-column:1/-1}
+  .pair.single{grid-template-columns:minmax(0,1fr) auto}
+  .pair.single>input:first-child{grid-column:1}
+  .modal,.modal.wide{width:calc(100vw - 20px);max-width:calc(100vw - 20px);padding:14px}
+}
+@media (max-width:720px){
+  .action-group{flex:1 1 100%}
+  .action-group.danger-group{margin-left:0;padding-left:0;border-left:0;padding-top:12px;border-top:1px solid var(--bad-line)}
+  .menu{flex:0 0 auto}
+  .menu-list form,.actions .menu-list form{display:block;flex:none}
+  .table .actions .menu .menu-btn{flex:0 0 auto;min-width:48px}
+  .menu .menu-list .act{min-height:44px;display:flex;align-items:center;justify-content:flex-start;padding:8px 16px}
+  .logline{flex-wrap:wrap;gap:0 8px}
+  .logsrc{flex:0 0 auto}
+  .logtext{flex:1 1 100%}
+}
+@media (pointer:coarse){:root{--code-size:16px}}
+/* Phones and tablets do not zoom: the viewport meta turns pinch zoom off, touch-action turns off double-tap zoom
+   (iOS ignores user-scalable=no), and a field under 16px would make iOS zoom in on focus. Desktop keeps its sizes. */
+html,body{touch-action:manipulation}
+@media (max-width:720px),(pointer:coarse){
+  input:not([type=submit]):not([type=button]):not([type=checkbox]):not([type=radio]),select,textarea,textarea.wide{font-size:16px}
+}
+
+/* Tool tester: the answer of a Run, and the schema, scroll inside the dialog instead of stretching it. */
+.try-out{max-height:45vh;overflow:auto;word-break:break-word}
+
+/* long checks in a card wrap as a row instead of a single unbreakable line */
+.card label.check,.form label.check{display:flex;align-items:flex-start;margin:8px 0;line-height:1.45;max-width:100%}
+.card label.check input,.form label.check input{margin-top:3px}
+
+/* ghook: health stats, live feed, wizard, drag handle. Same tokens as the rest of the UI. */
+.skip{position:absolute;left:8px;top:-48px;z-index:100;background:var(--panel);color:var(--fg);border:1px solid var(--acc);padding:8px 12px}
+.skip:focus{top:8px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:0 0 12px}
+.stat{border:1px solid var(--line);background:var(--panel);padding:12px 14px;min-width:0}
+.stat b{display:block;font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.2;overflow-wrap:anywhere}
+.stat span{display:block;margin-top:4px;color:var(--dim);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.feed{max-height:340px;overflow:auto;background:var(--well);border:1px solid var(--line)}
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.handle{cursor:grab;color:var(--dim);user-select:none;font-size:16px;letter-spacing:-1px}
+tr.dragging{opacity:.55}
+.keys{display:flex;flex-wrap:wrap;gap:8px 16px;margin:6px 0}
+.keys span{color:var(--dim)}
+kbd{font-family:var(--mono);font-size:12px;border:1px solid var(--line);background:var(--well);padding:0 5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:720px){.grid2{grid-template-columns:1fr}}

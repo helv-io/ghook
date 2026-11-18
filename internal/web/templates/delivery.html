@@ -1,0 +1,20 @@
+{{define "body"}}
+<h2>Delivery {{.Delivery.Key}}</h2>
+<div class="card"><table class="table kv"><tbody>
+<tr><th>Status</th><td><span class="pill {{if eq .Delivery.Status "sent"}}ok{{else if eq .Delivery.Status "dead"}}bad{{else}}warn{{end}}">{{.Delivery.Status}}</span> attempt {{.Delivery.Attempts}}</td></tr>
+<tr><th>Route</th><td>{{.Delivery.RouteName}}</td></tr>
+<tr><th>Target</th><td><code>{{.Delivery.TargetName}}</code></td></tr>
+<tr><th>Account</th><td>{{.Delivery.AccountEmail}}</td></tr>
+<tr><th>Message</th><td><code>{{.Delivery.GmailID}}</code></td></tr>
+<tr><th>When</th><td>{{when .Delivery.CreatedAt}}</td></tr>
+{{if .Delivery.LastError}}<tr><th>Error</th><td class="bad">{{.Delivery.LastError}}</td></tr>{{end}}
+<tr><th>Response</th><td>{{if .Delivery.ResponseStatus}}HTTP {{.Delivery.ResponseStatus}}{{else}}—{{end}}</td></tr>
+</tbody></table>
+<div class="row">
+<form method="post" action="/admin/deliveries/retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Delivery.ID}}"><button class="act">Retry (same id)</button></form>
+<form method="post" action="/admin/deliveries/replay"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Delivery.ID}}"><button class="btn">Replay (new id)</button></form>
+<a class="act" href="/admin/deliveries">Back</a>
+</div></div>
+<h2>Request</h2><pre>{{if .Delivery.RequestLog}}{{.Delivery.RequestLog}}{{else}}Nothing sent yet.{{end}}</pre>
+<h2>Response</h2><pre>{{if .Delivery.ResponseBody}}{{.Delivery.ResponseBody}}{{else}}—{{end}}</pre>
+{{end}}
