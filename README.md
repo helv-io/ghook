@@ -9,7 +9,9 @@
 
 **ghook** /ˈdʒiːhʊk/
 
-Gmail, plus the hook a message hangs on. The mark is the same family as [skgate](https://github.com/helv-io/skgate): a dark tile, a yellow letter, a white accent.
+The G stands for both Gmail and Grok: Gmail push comes in, Grok Bot webhooks go out. The rest is the hook a message hangs on.
+
+The mark is the same family as [skgate](https://github.com/helv-io/skgate): a dark tile, a yellow letter, a white accent.
 
 ## Quick start
 
