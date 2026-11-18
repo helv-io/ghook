@@ -1,7 +1,7 @@
 {{define "body"}}
-<p>One Gmail watch per account, one Pub/Sub topic. Ghook pulls the subscription, so nothing here has to be reachable from Google.</p>
+<p>One Gmail watch per account, one Pub/Sub topic. <span class="gh-word">Ghook</span> pulls the subscription, so nothing here has to be reachable from Google.</p>
 <div class="steps"><span class="pill {{if .HasClient}}ok{{else}}warn{{end}}">1. OAuth client</span><span class="pill {{if .Accounts}}ok{{else}}warn{{end}}">2. Connect</span><span class="pill {{if .Pub.Topic}}ok{{else}}warn{{end}}">3. Pub/Sub</span><span class="pill">4. Watch</span></div>
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+{{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 
 <div class="card"><h3>1. OAuth client</h3>
 <p>Create a web client in Google Cloud and paste the downloaded JSON. The redirect URI must be exactly this:</p>
@@ -16,11 +16,11 @@
 </form></div>
 
 <div class="card"><h3>2. Connect Google</h3>
-<p>The default scope is <code>gmail.readonly</code>. That is enough to read new mail. Labels that ghook applies, and Gmail filters, need extra scopes. Turn those on only if you want them, then connect again.</p>
+<p>The default scope is <code>gmail.readonly</code>. That is enough to read new mail. Labels that <span class="gh-word">ghook</span> applies, and Gmail filters, need extra scopes. Turn those on only if you want them, then connect again.</p>
 <form method="post" action="/admin/accounts/connect" class="form">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
-<label class="check"><input type="checkbox" name="gmail_modify" value="1" {{if .Modify}}checked{{end}}> Allow <code>gmail.modify</code> so ghook can create labels and mark routed mail <code>{{.LabelPrefix}}/Routed/&lt;target&gt;</code></label>
-<label class="check"><input type="checkbox" name="gmail_settings" value="1" {{if .SettingsScope}}checked{{end}}> Allow <code>gmail.settings.basic</code> so ghook can create Gmail filters</label>
+<label class="check"><input type="checkbox" name="gmail_modify" value="1" {{if .Modify}}checked{{end}}> Allow <code>gmail.modify</code> so <span class="gh-word">ghook</span> can create labels and mark routed mail <code>{{.LabelPrefix}}/Routed/&lt;target&gt;</code></label>
+<label class="check"><input type="checkbox" name="gmail_settings" value="1" {{if .SettingsScope}}checked{{end}}> Allow <code>gmail.settings.basic</code> so <span class="gh-word">ghook</span> can create Gmail filters</label>
 <label class="check"><input type="checkbox" name="gmail_pubsub" value="1" {{if .PubSubScope}}checked{{end}}> Also grant the Pub/Sub scope on this user, instead of a service account</label>
 <p class="muted">Reconnect after changing scopes. Google shows an unverified-app screen for a personal Gmail account; that is expected until you publish the consent screen.</p>
 <button class="btn fill" type="submit" {{if not .HasClient}}disabled{{end}}>Connect Google</button>
@@ -38,7 +38,7 @@
 </div>
 
 <div class="card"><h3>3. Pub/Sub</h3>
-<p>Pull is the default: ghook subscribes from inside your network. A service account with Pub/Sub Subscriber on the subscription is the robust choice, because it does not depend on the Gmail refresh token. The OAuth grant above is the alternative when that Google user can manage the topic.</p>
+<p>Pull is the default: <span class="gh-word">ghook</span> subscribes from inside your network. A service account with Pub/Sub Subscriber on the subscription is the robust choice, because it does not depend on the Gmail refresh token. The OAuth grant above is the alternative when that Google user can manage the topic.</p>
 <form method="post" action="/admin/accounts/pubsub" enctype="multipart/form-data" class="form wide">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <div class="field"><label>Project ID<input name="project" value="{{.Pub.Project}}" autocomplete="off"></label></div>
@@ -61,7 +61,7 @@
 </div>
 
 <div class="card"><h3>Labels</h3>
-<p>A label <code>{{.LabelPrefix}}/CFO</code> routes to the target named CFO when the label convention is on. <code>{{.LabelPrefix}}/Routed/…</code> is what ghook writes, and it does not route.</p>
+<p>A label <code>{{.LabelPrefix}}/CFO</code> routes to the target named CFO when the label convention is on. <code>{{.LabelPrefix}}/Routed/&lt;target&gt;</code> is what <span class="gh-word">ghook</span> writes, and it does not route.</p>
 <form method="get" action="/admin/accounts" class="row">
 <label>Mailbox<select name="labels">{{range .Accounts}}<option value="{{.ID}}" {{if eq .ID $.LabelAccount}}selected{{end}}>{{.Email}}</option>{{end}}</select></label>
 <button class="act" type="submit">Show labels</button>

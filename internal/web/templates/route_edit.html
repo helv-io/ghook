@@ -1,6 +1,6 @@
 {{define "body"}}
 <h2>{{if .IsNew}}New route{{else}}Edit route{{end}}</h2>
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+{{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <form method="post" action="/admin/routes/save" class="form wide">
 <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Route.ID}}">
 <div class="field"><label>Name<input name="name" required value="{{.Route.Name}}"></label></div>

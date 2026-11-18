@@ -1,10 +1,10 @@
 {{define "body"}}
 <h2>{{if .IsNew}}New target{{else}}Edit target{{end}}</h2>
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+{{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <form method="post" action="/admin/targets/save" class="form wide">
 <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Target.ID}}">
 <div class="card" data-grok><h3>Grok bot preset</h3>
-<p>Paste the webhook line as <code>URL KEY</code>. Ghook fills the URL and the bearer token.</p>
+<p>Paste the webhook line as <code>URL KEY</code>. <span class="gh-word">Ghook</span> fills the URL and the bearer token.</p>
 <div class="row"><input type="text" data-grok-paste placeholder="https://bot.example.com/hook sk-..." autocomplete="off" spellcheck="false" aria-label="Grok bot URL and key"><button type="button" class="act" data-grok-apply>Fill fields</button></div></div>
 <div class="field"><label>Name<input name="name" required value="{{.Target.Name}}" placeholder="CFO"></label></div>
 <div class="field"><label>URL<input name="url" type="url" required value="{{.Target.URL}}" placeholder="https://bot.example.com/hook"></label></div>

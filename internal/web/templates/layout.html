@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="/admin/static/app.css">
 </head><body{{if .CSRF}} data-csrf="{{.CSRF}}"{{end}}>
 <a class="skip" href="#content">Skip to content</a>
-{{if and .CSRF (not .Solo)}}<header data-nav data-collapsed><span class="brand"><img src="/favicon.svg" alt="" width="18" height="18">ghook</span><span class="here" data-nav-here>{{.Title}}</span><button type="button" class="act nav-btn" aria-expanded="false" aria-controls="site-nav" data-nav-button>Menu</button>
+{{if and .CSRF (not .Solo)}}<header data-nav data-collapsed><span class="brand"><img src="/favicon.svg" alt="" width="18" height="18"><span class="gh-word">ghook</span></span><span class="here" data-nav-here>{{.Title}}</span><button type="button" class="act nav-btn" aria-expanded="false" aria-controls="site-nav" data-nav-button>Menu</button>
 <nav class="nav-panel" id="site-nav" aria-label="Main">
 <a href="/admin" class="{{if eq .Nav "status"}}on{{end}}"{{if eq .Nav "status"}} aria-current="page"{{end}}>status</a>
 <a href="/admin/accounts" class="{{if eq .Nav "accounts"}}on{{end}}"{{if eq .Nav "accounts"}} aria-current="page"{{end}}>accounts</a>
@@ -19,9 +19,9 @@
 <form method="post" action="/admin/workspace"><input type="hidden" name="csrf" value="{{.CSRF}}"><select name="workspace" aria-label="Workspace">{{range .Workspaces}}<option value="{{.ID}}" {{if eq .ID $.WorkspaceID}}selected{{end}}>{{.Name}}</option>{{end}}</select><button class="act" type="submit">Switch</button></form>{{end}}
 <a class="ver" href="https://github.com/helv-io/ghook" target="_blank" rel="noopener noreferrer">v{{.Version}}</a>{{if .User}}<span class="who" title="{{.User}}">{{.User}}</span>{{end}}<form method="post" action="/admin/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="act plain">logout</button></form></nav></header>{{end}}
 <main id="content"{{if .Solo}} class="solo"{{end}}>
-{{if .Banner}}<div class="callout bad">{{.Banner}}</div>{{end}}
+{{if .Banner}}<div class="callout bad">{{wordmark .Banner}}</div>{{end}}
 {{template "body" .}}</main>
-{{if .Toasts}}<div class="toasts">{{range .Toasts}}<div class="toast {{.Kind}}">{{.Msg}}</div>{{end}}</div>{{end}}
+{{if .Toasts}}<div class="toasts">{{range .Toasts}}<div class="toast {{.Kind}}">{{wordmark .Msg}}</div>{{end}}</div>{{end}}
 {{if and .CSRF (not .Solo)}}<dialog class="modal" id="confirm"><h3>Confirm</h3><p data-confirm-text></p><div class="actions"><button type="button" class="act" data-confirm-cancel>Cancel</button><button type="button" class="act" data-confirm-ok>Confirm</button></div></dialog>
 <dialog class="modal wide" id="keys"><h3>Keyboard</h3>
 <div class="keys"><span><kbd>g</kbd> then <kbd>d</kbd> status</span><span><kbd>g</kbd> <kbd>a</kbd> accounts</span><span><kbd>g</kbd> <kbd>r</kbd> routes</span><span><kbd>g</kbd> <kbd>t</kbd> targets</span><span><kbd>g</kbd> <kbd>l</kbd> deliveries</span><span><kbd>g</kbd> <kbd>s</kbd> settings</span><span><kbd>g</kbd> <kbd>u</kbd> audit</span><span><kbd>/</kbd> search</span><span><kbd>?</kbd> this list</span><span><kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> reorder a focused route</span></div>

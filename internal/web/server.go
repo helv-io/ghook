@@ -168,11 +168,12 @@ func New(rt *runtime.App) (*Server, error) {
 
 func (s *Server) funcs() template.FuncMap {
 	return template.FuncMap{
-		"when":    func(u int64) string { return s.format(u, false) },
-		"until":   func(u int64) string { return s.until(u) },
-		"rel":     func(u int64) string { return s.rel(u) },
-		"lines":   func(v []string) string { return strings.Join(v, "\n") },
-		"summary": func(sp match.Spec) string { return sp.Summary() },
+		"wordmark": wordmark,
+		"when":     func(u int64) string { return s.format(u, false) },
+		"until":    func(u int64) string { return s.until(u) },
+		"rel":      func(u int64) string { return s.rel(u) },
+		"lines":    func(v []string) string { return strings.Join(v, "\n") },
+		"summary":  func(sp match.Spec) string { return sp.Summary() },
 		"has": func(list []string, x string) bool {
 			for _, v := range list {
 				if strings.EqualFold(v, x) {

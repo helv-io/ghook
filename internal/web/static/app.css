@@ -36,6 +36,9 @@ header .here,header .nav-btn{display:none}
 .nav-panel{display:contents}
 header .brand{display:flex;align-items:center;gap:8px;padding:9px 14px;border-right:1px solid var(--line);font-weight:700;letter-spacing:.04em}
 header .brand img{display:block}
+/* Product name: yellow with a soft glow so it stands out on the dark field.
+   #ffd100 on --bg / --panel is about 13:1, well above WCAG AAA. */
+.gh-word{color:#ffd100;text-shadow:0 0 8px rgba(255,209,0,.55),0 0 18px rgba(255,209,0,.22)}
 header a{padding:9px 14px;color:var(--dim);border-right:1px solid var(--line);white-space:nowrap}
 header a:hover{color:var(--fg);background:var(--hover);text-decoration:none}
 header a.on{color:var(--fg);background:var(--bg);box-shadow:inset 0 -2px 0 var(--acc)}

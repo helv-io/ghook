@@ -1,7 +1,7 @@
 {{define "body"}}
 <div class="row spread"><h2>Routes</h2><a class="btn" href="/admin/routes/new">Add route</a></div>
 <p>First match wins unless the route says continue. A fallback runs only when nothing else matched, and it still has a filter. Drag a row, or focus it and press Alt+arrow.</p>
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+{{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <div class="filter"><input type="search" data-search data-filter="#routes" placeholder="Filter routes" aria-label="Filter routes"></div>
 <div class="card flush tablewrap"><table class="table" id="routes" data-reorder="/admin/routes/reorder">
 <thead><tr><th></th><th>Name</th><th>Match</th><th>Target</th><th></th></tr></thead>
