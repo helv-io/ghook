@@ -223,6 +223,10 @@ func (e *Engine) Sync(ctx context.Context, email, notifyHistory string) error {
 		if err := e.advance(acc.ID, latest); err != nil {
 			return err
 		}
+		// Catch-up syncs also record last notification / history lag.
+		if notifyHistory == "" {
+			_ = e.DB.TouchNotify(acc.ID, latest)
+		}
 	}
 	if fallback {
 		e.Feed.Add("sync", fmt.Sprintf("%s: resynced %d message(s), %d new", email, len(msgs), inserted))
@@ -291,7 +295,8 @@ func plansFor(m mail.Message, rules []match.Route, targets map[string]store.Targ
 			})
 		}
 	}
-	for _, hit := range match.Decide(rules, m) {
+	claimed := len(plans) > 0
+	for _, hit := range match.DecideClaimed(rules, m, claimed) {
 		if hit.TargetID == 0 || seenTarget[hit.TargetID] {
 			continue
 		}
@@ -449,6 +454,19 @@ func (e *Engine) Preview(ctx context.Context, rules []match.Route, n int) ([]Pre
 	if err != nil {
 		return nil, err
 	}
+	prefix := e.DB.Setting("label_prefix", "Ghook")
+	if strings.TrimSpace(prefix) == "" {
+		prefix = "Ghook"
+	}
+	convention := e.DB.BoolSetting("label_convention", true)
+	targets, err := e.DB.Targets()
+	if err != nil {
+		return nil, err
+	}
+	byName := map[string]store.Target{}
+	for _, t := range targets {
+		byName[strings.ToLower(t.Name)] = t
+	}
 	var out []Preview
 	for _, s := range stored {
 		m := s.AsMail()
@@ -471,10 +489,10 @@ func (e *Engine) Preview(ctx context.Context, rules []match.Route, n int) ([]Pre
 				}
 			}
 		}
-		hits := match.Decide(rules, m)
+		plans := plansFor(m, rules, byName, prefix, convention)
 		var names []string
-		for _, h := range hits {
-			names = append(names, h.Name)
+		for _, h := range plans {
+			names = append(names, h.RouteName)
 		}
 		route := ""
 		if len(names) > 0 {

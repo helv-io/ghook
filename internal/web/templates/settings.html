@@ -4,7 +4,7 @@
 <form method="post" action="/admin/settings" class="form wide">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <div class="field"><label>Label prefix<input name="label_prefix" value="{{.LabelPrefix}}"></label>
-<p class="muted">A Gmail label <code>{{.LabelPrefix}}/CFO</code> routes to the target CFO. <code>{{.LabelPrefix}}/Routed/&lt;target&gt;</code> is ignored.</p></div>
+<p class="muted">A Gmail label {{pathcode (printf "%s/CFO" .LabelPrefix)}} routes to the target CFO. {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}} is ignored.</p></div>
 <label class="check"><input type="checkbox" name="label_convention" value="1" {{if .LabelConvention}}checked{{end}}> Label-to-target convention</label>
 <div class="field"><label>Catch-up interval (minutes)<input type="number" name="catchup_minutes" min="1" value="{{.Catchup}}"></label>
 <p class="muted">history.list on this interval, because a notification can be dropped. Default 30.</p></div>

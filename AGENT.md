@@ -14,6 +14,7 @@ Ghook is a self-hosted Gmail push router: Gmail `users.watch` in, webhook POST o
 ## Style
 
 - Technical audience. No fluff, no hand-holding, short lines.
+- The visual system and the GHCR release workflow follow the same conventions as skgate. That connection is for developers; do not mention skgate in the README or in user-facing UI copy.
 - UI copy: short, plain, direct, in the voice of the rest of the app. Labels are nouns or verbs. A hint is one short sentence, and most fields need none. No filler or marketing words, no "Let's", no explanatory paragraphs, no parentheticals, no em dashes.
 - Generic examples only (`ghook.example.com`, `ada@example.com`, `admin@example.com`). No house-specific names, no personal data, no real mailboxes or tokens in code, docs, tests or screenshots.
 - One version display: semver (`vX.Y.Z`), in the header only.
@@ -23,7 +24,7 @@ Ghook is a self-hosted Gmail push router: Gmail `users.watch` in, webhook POST o
 
 - Shared styles and components, never page by page. New markup goes in `internal/web/templates/components.html` and `internal/web/static/app.css`. No inline `style=` or `on*=`, and no page-specific CSS rules.
 - The top bar is sticky on every page and width (`position:sticky;top:0`, opaque, `--z-header`, below menus, dialogs and `--z-toast`). `--header-h` (kept by `app.js`) is the `scroll-padding-top`. Below 800 px it is one row: brand, current page name, a Menu button. The links, version, user and logout fold into `.nav-panel`. Wider windows keep the links in the bar. Standalone screens (login, privacy, terms) have no bar.
-- No horizontal overflow, down to 360 px, on any public or admin page. Inline `code` and `.code` wrap (`white-space:normal`, `overflow-wrap:anywhere`, `overflow-x:visible`). Never set `white-space:nowrap` with `overflow-x:auto` on inline code. `pre` wraps. Tables and cards do not create a page or element horizontal scrollbar. After a CSS or template change, run the headless overflow audit at 1280, 768 and 375 (and 360 if the layout changed).
+- No horizontal overflow, down to 360 px, on any public or admin page. Short code chips and badges do not break mid-word. Long paths may wrap at `/` (class `path`, with `<wbr>` after each slash). Never set `white-space:nowrap` with `overflow-x:auto` on inline code. `pre` wraps. Tables and cards do not create a page or element horizontal scrollbar. After a CSS or template change, run the headless overflow audit at 1280, 768 and 375 (and 360 if the layout changed).
 - The product name in visible prose uses the reusable wordmark: `<span class="gh-word">ghook</span>` (keep the original capitalization, including `Ghook`). The class is `#ffd100` with a soft yellow `text-shadow`. Do not wrap the word inside code chips (`Ghook/CFO`, `X-Ghook-Delivery`), form values, placeholders, `<option>` text, or the document `<title>`. Dynamic errors and toasts go through the `wordmark` template func, which escapes first and matches the whole word only.
 - Chips that name a label path show the full text and wrap, never an ellipsis. Write `Ghook/Routed/<target>`, not `Ghook/Routed/…`.
 - List tables are tables above 800 px and a stack of cards below it, from the same markup. Every data cell on those tables carries `data-label`.

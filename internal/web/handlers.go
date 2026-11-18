@@ -217,6 +217,9 @@ func (s *Server) fillAccounts(p *page, r *http.Request) {
 	p.PubSubScope = s.db(r).BoolSetting("gmail_pubsub", false)
 	p.Pub = s.db(r).LoadPubSub()
 	p.LabelPrefix = s.db(r).Setting("label_prefix", "Ghook")
+	if len(p.Accounts) > 0 {
+		p.LabelAccount = p.Accounts[0].ID
+	}
 	if id := r.URL.Query().Get("labels"); id != "" {
 		n, _ := strconv.ParseInt(id, 10, 64)
 		p.LabelAccount = n

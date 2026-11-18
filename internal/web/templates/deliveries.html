@@ -7,17 +7,18 @@
 <button class="act" type="submit">Filter</button>
 </form>
 <div class="card flush tablewrap"><table class="table">
-<thead><tr><th>When</th><th>Route</th><th>Target</th><th>Message</th><th>Status</th><th></th></tr></thead>
+<thead><tr><th>When</th><th>Route</th><th>Target</th><th>From</th><th>Subject</th><th>Status</th><th></th></tr></thead>
 <tbody>{{range .Deliveries}}<tr>
 <td data-label="When">{{when .CreatedAt}}</td>
 <td data-label="Route">{{.RouteName}}</td>
 <td data-label="Target"><code>{{.TargetName}}</code></td>
-<td class="trunc" data-label="Message"><a href="/admin/deliveries/{{.ID}}">{{.GmailID}}</a></td>
+<td data-label="From">{{if .From}}{{.From}}{{else}}—{{end}}</td>
+<td class="wrap" data-label="Subject"><a href="/admin/deliveries/{{.ID}}">{{if .Subject}}{{.Subject}}{{else}}(no subject){{end}}</a><span class="sub mono">{{.GmailID}}</span></td>
 <td class="status" data-label="Status"><span class="pill {{if eq .Status "sent"}}ok{{else if eq .Status "dead"}}bad{{else if eq .Status "retry"}}warn{{else}}off{{end}}">{{.Status}}</span>{{if .Attempts}} <span class="muted">{{.Attempts}}</span>{{end}}</td>
 <td class="actions-cell"><div class="actions">
-<form method="post" action="/admin/deliveries/retry"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Retry</button></form>
-<form method="post" action="/admin/deliveries/replay"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Replay</button></form>
-</div></td></tr>{{else}}<tr><td class="empty" colspan="6">No deliveries.</td></tr>{{end}}</tbody>
+{{if or (eq .Status "dead") (eq .Status "retry")}}<form method="post" action="/admin/deliveries/retry"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Retry</button></form>{{end}}
+{{if or (eq .Status "sent") (eq .Status "dead") (eq .Status "retry")}}<form method="post" action="/admin/deliveries/replay"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Replay</button></form>{{end}}
+</div></td></tr>{{else}}<tr><td class="empty" colspan="7">No deliveries.</td></tr>{{end}}</tbody>
 </table></div>
 <div class="card"><h3>Replay a window</h3>
 <p>Re-queue every sent, dead or retrying delivery in the window. Each one gets a new <code>X-Ghook-Delivery</code> id. Retry on a single row keeps the same id.</p>

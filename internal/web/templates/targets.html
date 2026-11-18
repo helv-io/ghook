@@ -6,7 +6,7 @@
 <thead><tr><th>Name</th><th>URL</th><th>Auth</th><th></th></tr></thead>
 <tbody>{{range .Targets}}<tr>
 <td class="primary" data-label="Name"><a class="name" href="/admin/targets/{{.ID}}"><code>{{.Name}}</code></a>{{if .Paused}} <span class="pill warn">paused</span>{{end}}{{if .DigestAt}} <span class="pill">digest {{.DigestAt}}</span>{{end}}{{if .QuietStart}} <span class="pill">quiet {{.QuietStart}}–{{.QuietEnd}}</span>{{end}}</td>
-<td class="trunc" data-label="URL"><code>{{.URL}}</code></td>
+<td class="trunc" data-label="URL">{{pathcode .URL}}</td>
 <td data-label="Auth">{{.AuthMode}}{{if .HasSecret}} <span class="pill ok">secret</span>{{else}} <span class="pill off">no secret</span>{{end}}</td>
 <td class="actions-cell"><div class="actions">
 <form method="post" action="/admin/targets/pause"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="paused" value="{{if .Paused}}0{{else}}1{{end}}"><button class="act" type="submit">{{if .Paused}}Resume{{else}}Pause{{end}}</button></form>

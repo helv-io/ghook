@@ -4,6 +4,7 @@ import (
 	"html"
 	"html/template"
 	"regexp"
+	"strings"
 )
 
 // productName is the visible product word only, as a whole word. Hyphenated
@@ -21,4 +22,14 @@ func wordmark(s string) template.HTML {
 	return template.HTML(productName.ReplaceAllStringFunc(esc, func(m string) string {
 		return `<span class="gh-word">` + m + `</span>`
 	}))
+}
+
+// pathcode renders a slash-separated label or path as a code chip that may
+// wrap at each "/", but not in the middle of a segment.
+func pathcode(s string) template.HTML {
+	if s == "" {
+		return ""
+	}
+	esc := strings.ReplaceAll(html.EscapeString(s), "/", "/<wbr>")
+	return template.HTML(`<code class="path">` + esc + `</code>`)
 }

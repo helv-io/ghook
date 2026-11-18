@@ -21,7 +21,7 @@
 <p>Runs the saved rules against the last stored messages. Body text is fetched live when the mailbox is connected and is not kept.</p>
 <form method="post" action="/admin/routes/simulate" class="row">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
-<label>Last <input type="number" name="n" value="{{if .PreviewN}}{{.PreviewN}}{{else}}20{{end}}" min="1" max="100" style="width:5em"> messages</label>
+<label class="sim-n">Last <input type="number" name="n" value="{{if .PreviewN}}{{.PreviewN}}{{else}}20{{end}}" min="1" max="100"> messages</label>
 <button class="btn" type="submit">Run simulator</button>
 </form>
 {{if .Previews}}<div class="tablewrap"><table class="table"><thead><tr><th>From</th><th>Subject</th><th>Would hit</th></tr></thead><tbody>

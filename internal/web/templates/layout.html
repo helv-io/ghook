@@ -14,9 +14,9 @@
 <a href="/admin/targets" class="{{if eq .Nav "targets"}}on{{end}}"{{if eq .Nav "targets"}} aria-current="page"{{end}}>targets</a>
 <a href="/admin/deliveries" class="{{if eq .Nav "deliveries"}}on{{end}}"{{if eq .Nav "deliveries"}} aria-current="page"{{end}}>deliveries</a>
 <a href="/admin/settings" class="{{if eq .Nav "settings"}}on{{end}}"{{if eq .Nav "settings"}} aria-current="page"{{end}}>settings</a>
+<a href="/admin/members" class="{{if eq .Nav "members"}}on{{end}}"{{if eq .Nav "members"}} aria-current="page"{{end}}>members</a>
 <a href="/admin/audit" class="{{if eq .Nav "audit"}}on{{end}}"{{if eq .Nav "audit"}} aria-current="page"{{end}}>audit</a>
-{{if .ShowTeam}}<a href="/admin/members" class="{{if eq .Nav "members"}}on{{end}}">members</a>
-<form method="post" action="/admin/workspace"><input type="hidden" name="csrf" value="{{.CSRF}}"><select name="workspace" aria-label="Workspace">{{range .Workspaces}}<option value="{{.ID}}" {{if eq .ID $.WorkspaceID}}selected{{end}}>{{.Name}}</option>{{end}}</select><button class="act" type="submit">Switch</button></form>{{end}}
+{{if .ShowSwitcher}}<form method="post" action="/admin/workspace"><input type="hidden" name="csrf" value="{{.CSRF}}"><select name="workspace" aria-label="Workspace">{{range .Workspaces}}<option value="{{.ID}}" {{if eq .ID $.WorkspaceID}}selected{{end}}>{{.Name}}</option>{{end}}</select><button class="act" type="submit">Switch</button></form>{{end}}
 <a class="ver" href="https://github.com/helv-io/ghook" target="_blank" rel="noopener noreferrer">v{{.Version}}</a>{{if .User}}<span class="who" title="{{.User}}">{{.User}}</span>{{end}}<form method="post" action="/admin/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="act plain">logout</button></form></nav></header>{{end}}
 <main id="content"{{if .Solo}} class="solo"{{end}}>
 {{if .Banner}}<div class="callout bad">{{wordmark .Banner}}</div>{{end}}

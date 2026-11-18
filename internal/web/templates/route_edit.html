@@ -3,12 +3,23 @@
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <form method="post" action="/admin/routes/save" class="form wide">
 <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Route.ID}}">
+<div class="card" id="simulator">
+<h3>Simulator</h3>
+<p>Runs this draft against the last stored messages, including the label convention. Body text is fetched live when the mailbox is connected and is not kept.</p>
+<div class="row">
+<button class="act" type="submit" formaction="/admin/routes/preview">Simulate this draft</button>
+<label class="sim-n">Last <input type="number" name="n" value="20" min="1" max="100"> messages</label>
+</div>
+{{if .Previews}}<div class="tablewrap"><table class="table"><thead><tr><th>From</th><th>Subject</th><th>Would hit</th></tr></thead><tbody>
+{{range .Previews}}<tr><td data-label="From">{{.From}}</td><td class="wrap" data-label="Subject">{{.Subject}}</td><td data-label="Would hit">{{if .Route}}<span class="pill ok">{{.Route}}</span>{{else}}<span class="pill off">no route</span>{{end}}</td></tr>{{end}}
+</tbody></table></div>{{end}}
+</div>
 <div class="field"><label>Name<input name="name" required value="{{.Route.Name}}"></label></div>
 <div class="field"><label>Target<select name="target_id">{{range .Targets}}<option value="{{.ID}}" {{if eq .ID $.Route.TargetID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label></div>
 <label class="check"><input type="checkbox" name="enabled" value="1" {{if or .IsNew .Route.Enabled}}checked{{end}}> Enabled</label>
 <label class="check"><input type="checkbox" name="fallback" value="1" {{if .Route.Fallback}}checked{{end}}> Fallback (only when nothing else matched)</label>
 <label class="check"><input type="checkbox" name="continue" value="1" {{if .Route.Continue}}checked{{end}}> Continue to later rules after a match</label>
-<label class="check"><input type="checkbox" name="apply_label" value="1" {{if .Route.ApplyLabel}}checked{{end}}> Apply <code>{{.LabelPrefix}}/Routed/&lt;target&gt;</code> (needs gmail.modify)</label>
+<label class="check"><input type="checkbox" name="apply_label" value="1" {{if .Route.ApplyLabel}}checked{{end}}> Apply {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}} (needs gmail.modify)</label>
 <div class="field"><label>Combine fields<select name="op"><option value="and" {{if ne .Route.Spec.Op "or"}}selected{{end}}>AND</option><option value="or" {{if eq .Route.Spec.Op "or"}}selected{{end}}>OR</option></select></label>
 <p class="muted">Lists inside one field are OR (any sender, any label). An empty filter matches every message.</p></div>
 <div class="field"><label>From (address or domain, one per line)<textarea name="from" rows="3">{{lines .Route.Spec.From}}</textarea></label></div>
@@ -21,11 +32,6 @@
 {{range .Categories}}<label class="check"><input type="checkbox" name="category" value="{{.}}" {{if has $.Route.Spec.Categories .}}checked{{end}}>{{.}}</label>{{end}}</div>
 <div class="field"><label>Attachment<select name="attachment"><option value="" {{if eq .Route.Spec.Attachment ""}}selected{{end}}>any</option><option value="yes" {{if eq .Route.Spec.Attachment "yes"}}selected{{end}}>has an attachment</option><option value="no" {{if eq .Route.Spec.Attachment "no"}}selected{{end}}>no attachment</option></select></label></div>
 <div class="row"><button class="btn fill" type="submit">Save</button>
-<button class="act" type="submit" formaction="/admin/routes/preview">Simulate this draft</button>
-<label>Last <input type="number" name="n" value="20" min="1" max="100" style="width:5em"> messages</label>
 <a class="act" href="/admin/routes">Cancel</a></div>
 </form>
-{{if .Previews}}<h2>Simulator</h2><div class="card flush tablewrap"><table class="table"><thead><tr><th>From</th><th>Subject</th><th>Would hit</th></tr></thead><tbody>
-{{range .Previews}}<tr><td>{{.From}}</td><td class="wrap">{{.Subject}}</td><td>{{if .Route}}<span class="pill ok">{{.Route}}</span>{{else}}<span class="pill off">no route</span>{{end}}</td></tr>{{end}}
-</tbody></table></div>{{end}}
 {{end}}

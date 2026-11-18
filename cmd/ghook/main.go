@@ -22,6 +22,7 @@ import (
 	"github.com/helv-io/ghook/internal/runtime"
 	"github.com/helv-io/ghook/internal/store"
 	"github.com/helv-io/ghook/internal/web"
+	"github.com/helv-io/ghook/internal/when"
 )
 
 func main() {
@@ -182,8 +183,9 @@ func replayCmd(args []string) int {
 	id := fs.Int64("id", 0, "one delivery id")
 	route := fs.String("route", "", "route name")
 	target := fs.String("target", "", "target name")
-	since := fs.String("since", "", "RFC3339 or YYYY-MM-DD")
-	until := fs.String("until", "", "RFC3339 or YYYY-MM-DD")
+	since := fs.String("since", "", "RFC3339 or YYYY-MM-DD, in the workspace display timezone unless an offset is given")
+	until := fs.String("until", "", "RFC3339 or YYYY-MM-DD, in the workspace display timezone unless an offset is given")
+	workspace := fs.String("workspace", "", "workspace name or id (default workspace if empty)")
 	_ = fs.Parse(args)
 	db, err := openDB()
 	if err != nil {
@@ -191,6 +193,14 @@ func replayCmd(args []string) int {
 		return 1
 	}
 	defer db.Close()
+	if *workspace != "" {
+		ws, err := db.WorkspaceByRef(*workspace)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		db = db.Use(ws.ID)
+	}
 	if *id != 0 {
 		if err := db.Replay(*id, true); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -199,25 +209,17 @@ func replayCmd(args []string) int {
 		fmt.Printf("re-queued delivery %d\n", *id)
 		return 0
 	}
-	n, err := db.ReplayWindow(*route, *target, parseWhen(*since), parseWhen(*until))
+	loc := time.UTC
+	if name := db.Setting("timezone", "UTC"); name != "" {
+		if l, err := time.LoadLocation(name); err == nil {
+			loc = l
+		}
+	}
+	n, err := db.ReplayWindow(*route, *target, when.Parse(*since, loc), when.Parse(*until, loc))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	fmt.Printf("re-queued %d deliveries\n", n)
-	return 0
-}
-
-func parseWhen(s string) int64 {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.Unix()
-	}
-	if t, err := time.Parse("2006-01-02", s); err == nil {
-		return t.Unix()
-	}
 	return 0
 }

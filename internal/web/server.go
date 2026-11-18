@@ -135,7 +135,7 @@ type page struct {
 	NotifyDead, NotifyWatch, RetainBodies, InstanceAdmin, AutoProvision  bool
 	FallbackUser, WorkspaceName                                          string
 
-	ShowTeam               bool
+	ShowTeam, ShowSwitcher bool
 	Banner, Role, AuthMode string
 	WorkspaceID            int64
 	Workspaces             []store.Workspace
@@ -169,6 +169,7 @@ func New(rt *runtime.App) (*Server, error) {
 func (s *Server) funcs() template.FuncMap {
 	return template.FuncMap{
 		"wordmark": wordmark,
+		"pathcode": pathcode,
 		"when":     func(u int64) string { return s.format(u, false) },
 		"until":    func(u int64) string { return s.until(u) },
 		"rel":      func(u int64) string { return s.rel(u) },

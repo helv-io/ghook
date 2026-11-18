@@ -223,7 +223,7 @@ func anyAddress(patterns []string, header string) bool {
 		}
 		for _, a := range addrs {
 			if domain {
-				if domainOf(a) == p {
+				if domainMatch(domainOf(a), p) {
 					return true
 				}
 			} else if a == p {
@@ -258,6 +258,23 @@ func domainOf(addr string) string {
 	return ""
 }
 
+// domainMatch reports whether got is pat or a subdomain of pat.
+// A leading "*." on the pattern is ignored, so "*.example.com" and
+// "example.com" both match notification.example.com. A lookalike such
+// as notexample.com does not match example.com.
+func domainMatch(got, pat string) bool {
+	got = strings.ToLower(strings.TrimSpace(got))
+	pat = strings.ToLower(strings.TrimSpace(pat))
+	pat = strings.TrimPrefix(pat, "*.")
+	if got == "" || pat == "" {
+		return false
+	}
+	if got == pat {
+		return true
+	}
+	return strings.HasSuffix(got, "."+pat)
+}
+
 var (
 	reMu    sync.Mutex
 	reCache = map[string]*regexp.Regexp{}
@@ -284,8 +301,15 @@ func subjectMatch(expr, subject string) bool {
 }
 
 // Decide walks routes in order. Disabled routes are skipped. Fallback routes
-// run only when no earlier route matched.
+// run only when no earlier route matched and the message is not already
+// claimed (for example by a Ghook/ label).
 func Decide(routes []Route, m mail.Message) []Route {
+	return DecideClaimed(routes, m, false)
+}
+
+// DecideClaimed is Decide with an explicit claimed flag. A label-convention
+// hit counts as claimed, so a fallback must not also fire.
+func DecideClaimed(routes []Route, m mail.Message, claimed bool) []Route {
 	var hits []Route
 	for _, r := range routes {
 		if !r.Enabled || r.Fallback {
@@ -298,7 +322,7 @@ func Decide(routes []Route, m mail.Message) []Route {
 			}
 		}
 	}
-	if len(hits) > 0 {
+	if len(hits) > 0 || claimed {
 		return hits
 	}
 	for _, r := range routes {
