@@ -1,7 +1,23 @@
-# Publishes ghcr.io/<owner>/ghook on every version tag (v*), linux/amd64 and linux/arm64,
-# and opens a GitHub Release for a stable vX.Y.Z tag.
-# Nothing is tagged until the tests pass. A manual run tags ci-test-<run id> only.
-# Uses the built-in GITHUB_TOKEN. Do not push a tag until you mean to release.
+# Publishes ghcr.io/<owner>/ghook on every version tag (v*), linux/amd64 and linux/arm64.
+#
+# How it runs (same shape as skgate, one image variant):
+#   test    gofmt, go vet, go test
+#   build   two jobs (native amd64 and native arm64, no emulation) push their image
+#           by digest only, with no tag, and keep their layers in a registry cache that every ref can read.
+#   merge   after test AND build succeeded: puts the tags on one multi-arch manifest. Until this job runs
+#           nothing is tagged, so a failing test never publishes.
+#
+# Tags on a stable vX.Y.Z:
+#   vX.Y.Z  X.Y.Z  latest  <sha12>
+#
+# A manual run (workflow_dispatch) does the same but tags the result ci-test-<run id>
+# only, never a version or latest, so a change to this file can be proven without releasing.
+#
+#   github-release after test, on a stable vX.Y.Z tag: creates the GitHub Release page with generated notes.
+#                  An existing page is left alone, so a re-run succeeds. It does not wait for the images.
+#
+# Uses the built-in GITHUB_TOKEN; no other secret is needed.
+# The first push creates the package; set its visibility under the repository's Packages settings.
 
 name: Release
 
@@ -13,13 +29,16 @@ on:
 permissions:
   contents: read
 
+# A second run on the same ref replaces the first, except for tags: a release is never cancelled.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
+  CACHE: ghcr.io/${{ github.repository }}-buildcache
   IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+  # A pre-release tag such as v1.0.0-rc1 does not move latest.
   STABLE: ${{ startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-') }}
   VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('ci-test-{0}', github.run_id) }}
 
@@ -28,7 +47,7 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/go
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
@@ -36,7 +55,6 @@ jobs:
 
   build:
     name: build ${{ matrix.arch }}
-    needs: [test]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -48,15 +66,19 @@ jobs:
           - { arch: amd64, runner: ubuntu-latest }
           - { arch: arm64, runner: ubuntu-24.04-arm }
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: vars
+        run: echo "sha12=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      # Only for the labels: the same inputs as the merge job, so the labels match the tags.
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
           flavor: latest=false
@@ -64,20 +86,26 @@ jobs:
             type=raw,value=${{ env.VERSION }}
             type=semver,pattern={{version}}
             type=raw,value=latest,enable=${{ env.STABLE }}
+            type=raw,value=${{ steps.vars.outputs.sha12 }},enable=${{ env.IS_TAG }}
+
       - id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=registry,ref=${{ env.CACHE }}:${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.CACHE }}:${{ matrix.arch }},mode=max,image-manifest=true,oci-mediatypes=true
           provenance: false
           sbom: false
+
       - run: |
           mkdir -p "$RUNNER_TEMP/digests"
           digest="${{ steps.build.outputs.digest }}"
+          # amd64.<hex> sorts before arm64.<hex>, so the manifest lists the platforms in the same order as before
           touch "$RUNNER_TEMP/digests/${{ matrix.arch }}.${digest#sha256:}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: digests-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/*
@@ -86,26 +114,30 @@ jobs:
 
   merge:
     name: tag
-    needs: [build]
+    needs: [test, build]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - id: vars
+        run: echo "sha12=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      # upload-artifact v7 writes these digests; download-artifact v8 reads them. Keep the pair together.
+      - uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
           merge-multiple: true
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
           flavor: latest=false
@@ -113,7 +145,9 @@ jobs:
             type=raw,value=${{ env.VERSION }}
             type=semver,pattern={{version}}
             type=raw,value=latest,enable=${{ env.STABLE }}
-      - name: Tag one multi-arch manifest
+            type=raw,value=${{ steps.vars.outputs.sha12 }},enable=${{ env.IS_TAG }}
+
+      - name: Tag one multi-arch manifest from the per-arch images
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create \
@@ -121,6 +155,9 @@ jobs:
             $(for f in *; do printf '${{ env.IMAGE }}@sha256:%s ' "${f#*.}"; done)
       - run: docker buildx imagetools inspect ${{ env.IMAGE }}:${{ env.VERSION }}
 
+  # After the tests pass, create the GitHub Release for this tag. Stable vX.Y.Z only, never a manual run
+  # or a pre-release. It does not wait for the images. A tag that already has a release is left as it is
+  # and the job succeeds.
   github-release:
     name: GitHub Release
     needs: [test]
@@ -140,13 +177,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "GitHub Release $GITHUB_REF_NAME already exists"
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Create the GitHub Release
         if: steps.stable.outputs.ok == 'true' && steps.existing.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}

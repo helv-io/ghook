@@ -14,7 +14,9 @@ RUN mkdir -p /out/data
 FROM gcr.io/distroless/static-debian12:nonroot
 LABEL org.opencontainers.image.title="ghook" \
       org.opencontainers.image.description="Self-hosted Gmail push router. One watch, routes, webhooks." \
-      org.opencontainers.image.source="https://github.com/helv-io/ghook"
+      org.opencontainers.image.source="https://github.com/helv-io/ghook" \
+      org.opencontainers.image.url="https://github.com/helv-io/ghook" \
+      org.opencontainers.image.licenses="MIT"
 COPY --from=build /out/ghook /ghook
 COPY --from=build --chown=1000:1000 /out/data /data
 # Start as root so a fresh volume can be chowned to PUID:PGID, then ghook drops privileges
