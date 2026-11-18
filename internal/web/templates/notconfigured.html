@@ -1,5 +1,4 @@
-{{define "body"}}<div class="login"><div class="card">{{template "brandmark"}}<h2>OIDC not configured</h2>
-<p>Set <code>OIDC_ISSUER</code>, <code>OIDC_CLIENT_ID</code> and <code>OIDC_CLIENT_SECRET</code>, then restart.</p>
-<p>Redirect URL. <code>OIDC_REDIRECT_URL</code> changes it.</p>
-<button type="button" class="copybox" data-copy-text="{{.OIDCRedirect}}" aria-label="Copy the redirect URL"><code>{{.OIDCRedirect}}</code><span class="copyhint">Tap to copy</span></button>
-</div></div>{{end}}
+{{define "body"}}<div class="login"><div class="card">{{template "brandmark"}}<h2>Not ready</h2>
+<p>The operator has not finished configuring Google sign-in on this instance.</p>
+<p>Set <code>GOOGLE_CLIENT_FILE</code> or <code>GOOGLE_CLIENT_JSON</code>, and <code>PUBLIC_URL</code>, then restart.</p>
+<div class="choices"><a class="btn" href="/login">Back</a></div></div></div>{{end}}

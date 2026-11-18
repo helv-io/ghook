@@ -56,8 +56,10 @@ func usage() {
   ghook import FILE     load that YAML
   ghook replay          re-queue deliveries
 
-Environment: PUBLIC_URL, LISTEN_ADDR, DB_PATH, OIDC_ISSUER, OIDC_CLIENT_ID,
-OIDC_CLIENT_SECRET, OIDC_ALLOWED_EMAILS, OIDC_ALLOWED_GROUPS, SECRETS_KEY, PUID, PGID.
+Environment: PUBLIC_URL, LISTEN_ADDR, DB_PATH, GOOGLE_CLIENT_FILE or GOOGLE_CLIENT_JSON,
+PUBSUB_PROJECT, PUBSUB_TOPIC (default gmail-inbox), PUBSUB_SUBSCRIPTION (default ghook-pull),
+PUBSUB_SA_FILE or PUBSUB_SA_JSON, SECRETS_KEY, METRICS_TOKEN, MAX_TARGETS, MAX_ROUTES,
+MAX_DELIVERIES_PER_DAY, PUID, PGID.
 `)
 }
 
@@ -134,6 +136,7 @@ func openDB() (*store.DB, error) {
 func exportCmd(args []string) int {
 	fs := flag.NewFlagSet("export", flag.ExitOnError)
 	pass := fs.String("passphrase", "", "seal secrets with this passphrase")
+	user := fs.String("user", "", "user email or id")
 	_ = fs.Parse(args)
 	db, err := openDB()
 	if err != nil {
@@ -141,7 +144,12 @@ func exportCmd(args []string) int {
 		return 1
 	}
 	defer db.Close()
-	raw, err := bundle.Export(db, *pass)
+	u, err := db.UserByRef(*user)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	raw, err := bundle.Export(db.Use(u.ID), *pass)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -153,9 +161,10 @@ func exportCmd(args []string) int {
 func importCmd(args []string) int {
 	fs := flag.NewFlagSet("import", flag.ExitOnError)
 	pass := fs.String("passphrase", "", "passphrase the file was sealed with")
+	user := fs.String("user", "", "user email or id")
 	_ = fs.Parse(args)
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: ghook import FILE")
+		fmt.Fprintln(os.Stderr, "usage: ghook import --user EMAIL FILE")
 		return 2
 	}
 	raw, err := os.ReadFile(fs.Arg(0))
@@ -169,7 +178,12 @@ func importCmd(args []string) int {
 		return 1
 	}
 	defer db.Close()
-	msg, err := bundle.Import(db, raw, *pass)
+	u, err := db.UserByRef(*user)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	msg, err := bundle.Import(db.Use(u.ID), raw, *pass)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -183,9 +197,9 @@ func replayCmd(args []string) int {
 	id := fs.Int64("id", 0, "one delivery id")
 	route := fs.String("route", "", "route name")
 	target := fs.String("target", "", "target name")
-	since := fs.String("since", "", "RFC3339 or YYYY-MM-DD, in the workspace display timezone unless an offset is given")
-	until := fs.String("until", "", "RFC3339 or YYYY-MM-DD, in the workspace display timezone unless an offset is given")
-	workspace := fs.String("workspace", "", "workspace name or id (default workspace if empty)")
+	since := fs.String("since", "", "RFC3339 or YYYY-MM-DD, in the user display timezone unless an offset is given")
+	until := fs.String("until", "", "RFC3339 or YYYY-MM-DD, in the user display timezone unless an offset is given")
+	user := fs.String("user", "", "user email or id (required)")
 	_ = fs.Parse(args)
 	db, err := openDB()
 	if err != nil {
@@ -193,14 +207,12 @@ func replayCmd(args []string) int {
 		return 1
 	}
 	defer db.Close()
-	if *workspace != "" {
-		ws, err := db.WorkspaceByRef(*workspace)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		db = db.Use(ws.ID)
+	u, err := db.UserByRef(*user)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
 	}
+	db = db.Use(u.ID)
 	if *id != 0 {
 		if err := db.Replay(*id, true); err != nil {
 			fmt.Fprintln(os.Stderr, err)

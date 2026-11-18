@@ -1,6 +1,8 @@
-{{define "body"}}<div class="login"><div class="card">{{template "brandmark"}}<h2>Terms</h2>
-<p>This <span class="gh-word">Ghook</span> instance is operated by whoever runs this server. Use of the instance is limited to the mailboxes and webhooks that operator connects.</p>
-<p><span class="gh-word">Ghook</span> reads Gmail so it can deliver notifications to those webhooks. It does not provide the service to the public, and it does not grant anyone else access to the mail.</p>
-<p>The software is provided as is, without warranty. The operator is responsible for the server, the Google Cloud project, and the webhooks.</p>
-<p><a href="/privacy">Privacy</a></p>
-</div></div>{{end}}
+{{define "body"}}
+<div class="login legal">{{template "brandmark"}}
+<h2>Terms</h2>
+<p>This <span class="gh-word">ghook</span> instance is operated by whoever runs this server. Anyone may sign in with Google to create their own account. Use of the instance is limited to the mailboxes and webhooks that account connects.</p>
+<p><span class="gh-word">ghook</span> reads Gmail so it can deliver notifications to those webhooks. It does not grant anyone else access to your mail, and it does not provide a public directory of users.</p>
+<p class="muted"><a href="/login">Sign in</a> · <a href="/privacy">Privacy</a></p>
+</div>
+{{end}}

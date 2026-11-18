@@ -1,11 +1,11 @@
 <p align="center"><img src="docs/img/logo.svg" width="72" alt="ghook logo"></p>
 <h1 align="center">ghook</h1>
 
-The G in Ghook stands for both Gmail and Grok: Gmail push comes in, Grok Bot webhooks go out.
+The G in ghook stands for both Gmail and Grok: Gmail push comes in, Grok Bot webhooks go out.
 
 ## What it does
 
-Ghook is a self-hosted Gmail push router. Gmail `users.watch` publishes new mail to a Pub/Sub topic. Ghook pulls that subscription, matches routes, and POSTs a JSON payload to the webhook that should receive it. Pull needs no public URL, so it works behind NAT.
+ghook is a self-hosted Gmail push router. Gmail `users.watch` publishes new mail to a Pub/Sub topic. ghook pulls that subscription, matches routes, and POSTs a JSON payload to the webhook that should receive it. Pull needs no public URL, so it works behind NAT.
 
 ```
 Gmail  --users.watch-->  Pub/Sub topic  --pull-->  ghook  --POST-->  webhook
@@ -13,7 +13,7 @@ Gmail  --users.watch-->  Pub/Sub topic  --pull-->  ghook  --POST-->  webhook
 
 ## Quick start
 
-You need an [OIDC provider](#auth-and-workspaces) with a confidential client. To try it on one machine with no provider of your own, use `docker-compose.quickstart.yml`.
+You need a Google Cloud OAuth web client and a shared Pub/Sub topic. Anyone who signs in with Google gets their own account, connects their own Gmail mailbox, and creates their own routes and targets.
 
 ```yaml
 # docker-compose.yml
@@ -26,11 +26,16 @@ services:
       - 8080:8080
     environment:
       - PUBLIC_URL=https://ghook.example.com
-      - OIDC_ISSUER=https://auth.example.com
-      - OIDC_CLIENT_ID=ghook
-      - OIDC_CLIENT_SECRET=change-me
+      - GOOGLE_CLIENT_FILE=/run/secrets/google-client.json
+      - PUBSUB_SA_FILE=/run/secrets/pubsub-sa.json
+      # optional; defaults are gmail-inbox and ghook-pull
+      # - PUBSUB_TOPIC=gmail-inbox
+      # - PUBSUB_SUBSCRIPTION=ghook-pull
+      # - METRICS_TOKEN=change-me
     volumes:
       - ./data:/data
+      - ./google-client.json:/run/secrets/google-client.json:ro
+      - ./pubsub-sa.json:/run/secrets/pubsub-sa.json:ro
     healthcheck:
       test: ["CMD", "/ghook", "healthcheck"]
       interval: 30s
@@ -39,21 +44,20 @@ services:
 ```
 
 1. `docker compose up -d`
-2. Open `https://ghook.example.com/admin` and sign in.
-3. On **accounts**, paste the Google OAuth client, connect a mailbox, and set the Pub/Sub topic.
-4. On **targets** and **routes**, say where mail goes.
+2. Open `https://ghook.example.com` and sign in with Google. That creates your account and can connect the same mailbox in one consent.
+3. On **targets** and **routes**, say where mail goes.
 
 The image is `ghcr.io/helv-io/ghook`. Tags follow the git tag: `vX.Y.Z`, `X.Y.Z`, and `latest`.
 
-`PUBLIC_URL` must be the `https://` address the browser uses. It is the OAuth redirect and the cookie scope. If you put ghook behind a reverse proxy, drop `ports` and point the proxy at container port 8080.
+`PUBLIC_URL` must be the `https://` address the browser uses. It is the OAuth redirect and the cookie scope. If you put ghook behind a reverse proxy, drop `ports` and point the proxy at container port 8080. The app itself serves `/login`, `/privacy`, `/terms`, and `/healthz`. Everything else requires a ghook session. Do not put a separate SSO proxy in front of those routes.
 
-### One machine, no identity provider
+### Local trial
 
 ```sh
 docker compose -f docker-compose.quickstart.yml up -d
 ```
 
-Open `http://localhost:8080/admin`. Sign in as `admin@example.com` / `password`. The login, the client secret, and plain HTTP are public knowledge. Do not expose this compose file. Configure Google in the UI afterwards.
+Point `GOOGLE_CLIENT_FILE` and `PUBSUB_SA_FILE` at your local JSON files (see `.env.example`). Open `http://localhost:8080` and sign in with Google. Add `http://localhost:8080/admin/google/callback` as an authorized redirect URI on the OAuth client.
 
 ## Google setup
 
@@ -85,7 +89,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 
 ## Concepts
 
-**Account.** One Gmail mailbox with a `users.watch` on the topic. Ghook stores the history id per mailbox and renews the watch before it expires (about 7 days).
+**Account.** One Gmail mailbox with a `users.watch` on the topic. ghook stores the history id per mailbox and renews the watch before it expires (about 7 days).
 
 **Target.** A named webhook: a URL and a secret. Auth is Bearer (default), a named header, or HMAC (`X-Ghook-Signature`). Every POST also sends `X-Ghook-Delivery`. On the target form, paste `URL KEY` (one space) and use **Fill fields** for a Grok Bot webhook.
 
@@ -93,7 +97,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 
 | Field | Match |
 | --- | --- |
-| From, To, Cc | Address (`ada@example.com`) or domain (`example.com`). A list is OR. |
+| From, To, Cc | Address (`ada@example.com`) or domain (`example.com`, the apex and every subdomain). `*.capitalone.com` matches subdomains only, not the apex. Case-insensitive. A list is OR. |
 | Subject | Regular expression. `(?i)` for case insensitive. A broken expression matches nothing. |
 | Contains | Case-insensitive, in the snippet or the body. |
 | Labels | Any listed label. Names, or system ids such as `INBOX`. |
@@ -101,7 +105,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 | Attachment | has one, or has none. |
 | Combine | AND or OR across those fields. An empty filter matches everything. |
 
-**Label convention.** On **settings**, leave the prefix at `Ghook` and the convention on. A Gmail label `Ghook/CFO` delivers to the target named `CFO` with no route. `Ghook/Routed/CFO` is the label ghook writes after a route opts in, and it does not itself route.
+**Label convention.** On **settings**, leave the prefix at `ghook` and the convention on. A Gmail label `ghook/CFO` delivers to the target named `CFO` with no route. Existing `Ghook/` labels still match. `ghook/Routed/CFO` is the label ghook writes after a route opts in, and it does not itself route.
 
 **Deliveries.** Each match is an outbox row. Retry keeps the same `X-Ghook-Delivery` id so the receiver can dedupe. Replay mints a new id. The outbox uses exponential backoff. After the attempt limit or the age limit the row is dead. Quiet hours, a digest time, a per-target rate limit, and pause are set on the target. Retry limits are on **settings**.
 
@@ -128,51 +132,46 @@ The default payload is metadata. No body, no attachments:
 
 Tick **include the plain-text body** on a target to add `body` and `body_text`. A payload template is a Go template over those fields. Leave it empty for the JSON above.
 
-## Auth and workspaces
+## Auth and accounts
 
-`AUTH_MODE` is `oidc`, `proxy`, or `none`. When it is unset, ghook uses OIDC if `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET` are set, and otherwise `none`.
+Sign-in is Google only. Anyone who completes Google sign-in gets their own account. There is no owner, invite list, or allowlist. Each user connects their own Gmail mailbox, and sees only their own routes, targets, deliveries, settings, and audit log. Target secrets and Google tokens are encrypted at rest with a key derived per user from the instance key.
 
-| Mode | What happens |
-| --- | --- |
-| `oidc` | Authorization code with PKCE. No local password. |
-| `proxy` | Trust `Remote-User`, `Remote-Email`, `Remote-Name`, and `Remote-Groups` (the Authelia and Authentik forward-auth headers). The TCP peer must be in `AUTH_TRUSTED_PROXIES`. |
-| `none` | One implicit admin. The UI shows a warning until you turn sign-in on. |
+The Google OAuth client and the Pub/Sub topic are instance-wide, set by the operator through the environment. Users do not paste credentials.
 
-If a trusted proxy sends no `Remote-User`, set `PROXY_FALLBACK_USER` to the account that should be used. With no fallback and no header, ghook shows a "no identity header" page.
+From the **account** page a user can sign out, or delete their account and data: ghook stops the Gmail watch, revokes the Google token, and deletes that user's rows.
 
-These paths must bypass forward auth:
+Per-user defaults: 25 targets, 50 routes, and 1000 deliveries per UTC day (`MAX_TARGETS`, `MAX_ROUTES`, `MAX_DELIVERIES_PER_DAY`).
 
-- `/privacy`, `/terms` (put these URLs on the OAuth consent screen)
+Public paths served by the app, with no session:
+
+- `/` (redirects to `/login` or `/admin`)
+- `/login`, `/privacy`, `/terms`
 - `/healthz`
 - `/admin/google/callback`
 - `/hooks/pubsub` (and anything under `/hooks/`)
 
-The admin UI stays behind the proxy. The Google callback still requires ghook's own session cookie, which was set before the browser left for Google.
-
-The first person to sign in is the instance admin. Everyone else is a member only where they are invited. Roles are owner, editor, and viewer.
-
-A workspace owns the mailboxes, Pub/Sub connections, targets, routes, deliveries, settings, and audit log. The Google OAuth client is shared, with an optional per-workspace override. Secrets are sealed with a key derived from the instance key for that workspace.
+`/metrics` is not public. Set `METRICS_TOKEN` and call it with `Authorization: Bearer <token>`. If the token is unset, `/metrics` returns 404. The text is aggregate only: queue counts, user count, active watches. It does not include account emails.
 
 ## Environment
 
-Required to boot a typical deploy. Everything else (Google, routes, targets, retention) lives in the database.
+Required to boot a typical deploy. Routes, targets and retention still live in the database, per user.
 
 | Variable | |
 | --- | --- |
 | `PUBLIC_URL` | Origin the browser uses, no trailing slash. |
-| `AUTH_MODE` | `oidc`, `proxy`, or `none`. Optional. Unset: OIDC if the three variables below are set, otherwise `none`. |
-| `OIDC_ISSUER` | Issuer URL. Required when mode is `oidc`. |
-| `OIDC_CLIENT_ID` | Confidential client id. Required when mode is `oidc`. |
-| `OIDC_CLIENT_SECRET` | Confidential client secret. Required when mode is `oidc`. |
+| `GOOGLE_CLIENT_FILE` or `GOOGLE_CLIENT_JSON` | Web OAuth client JSON. |
+| `PUBSUB_SA_FILE` or `PUBSUB_SA_JSON` | Service account that can pull the shared subscription. |
 
-Defaults: `LISTEN_ADDR=:8080`, `DB_PATH=/data/ghook.db`. If `SECRETS_KEY` is empty, `/data/secrets.key` is created on first start. Optional auth variables are in [AGENT.md](AGENT.md).
+Defaults: `LISTEN_ADDR=:8080`, `DB_PATH=/data/ghook.db`, topic `gmail-inbox`, subscription `ghook-pull`. `PUBSUB_PROJECT` is read from the service account JSON when unset. If `SECRETS_KEY` is empty, `/data/secrets.key` is created on first start. Optional variables are in [AGENT.md](AGENT.md) and `.env.example`.
+
+This version needs a fresh database. Opening a pre-0.1.3 file (workspace-era schema) returns an error asking you to back up and replace it.
 
 ## Operations
 
 | URL | |
 | --- | --- |
 | `/healthz` | `{"status":"ok"}`. The image healthcheck uses this. |
-| `/metrics` | Prometheus text: queue depth, dead letters, watch expiry, last notification. Unauthenticated. Do not publish that port. |
+| `/metrics` | Prometheus text: queue depth, dead letters, user count, active watches. Requires `METRICS_TOKEN`. Aggregate only; no account emails. |
 | `/hooks/pubsub` | Optional push receiver. JWT required. |
 
 **Backup** is a copy of `/data`. You need both `ghook.db` and `secrets.key` (or the `SECRETS_KEY` you set). One without the other cannot open the tokens. To upgrade, copy `./data` somewhere safe, then `docker compose pull && docker compose up -d`.
@@ -181,11 +180,11 @@ The CLI talks to the same database:
 
 ```sh
 ghook healthcheck
-ghook export > ghook.yaml
-ghook export --passphrase 'correct horse' > ghook.yaml
-ghook import ghook.yaml --passphrase 'correct horse'
-ghook replay --id 12
-ghook replay --route primary --since 2026-04-01
+ghook export --user ada@example.com > ghook.yaml
+ghook export --user ada@example.com --passphrase 'correct horse' > ghook.yaml
+ghook import --user ada@example.com ghook.yaml --passphrase 'correct horse'
+ghook replay --user ada@example.com --id 12
+ghook replay --user ada@example.com --route primary --since 2026-04-01
 ```
 
 Export omits secrets unless you set a passphrase, which seals them in the file. Import matches on name. A blank secret does not wipe a stored one. **Retry** in the UI keeps the delivery id. **Replay** (UI or CLI) mints a new one.
@@ -197,12 +196,12 @@ Export omits secrets unless you set a passphrase, which seals them in the file. 
 | Watch renewal failed | The topic exists, `gmail-api-push@system.gserviceaccount.com` has Publisher, and the refresh token still works. |
 | Refresh token dies every week | The consent screen is still in Testing. Publish it to production. |
 | "Unverified app" | Expected for a personal Gmail account. Advanced, then continue. |
-| History id too old | Normal after a long outage. Ghook lists the resync window and dedupes. The dashboard says so. |
+| History id too old | Normal after a long outage. ghook lists the resync window and dedupes. The dashboard says so. |
 | Pull errors | The service account JSON is the key for the right project, and it has Subscriber on the subscription. |
 | Push returns 401 | The audience must be the push URL. The optional email must be the service account Google signs as. |
 | Deliveries sit in retry | The target URL, the secret, and quiet hours. The delivery page has the status and the redacted request. |
 | A route matches nothing | Run the simulator. An invalid subject regex matches nothing. A fallback only runs when no earlier rule matched. |
-| Label `Ghook/CFO` did nothing | The convention is on, a target is named `CFO`, and the label is not under `Ghook/Routed/`. |
+| Label `ghook/CFO` did nothing | The convention is on, a target is named `CFO`, and the label is not under `ghook/Routed/`. Existing `Ghook/` labels also match. |
 
 ## License
 

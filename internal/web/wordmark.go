@@ -12,16 +12,15 @@ import (
 // to prose; do not run it on code chips, form values, or the document title.
 var productName = regexp.MustCompile(`(?i)\bghook\b`)
 
-// wordmark escapes s and wraps each standalone "ghook" or "Ghook" in the
-// reusable wordmark element so the name glows in yellow.
+// wordmark escapes s and wraps each standalone "ghook" (any capitalization)
+// in the reusable wordmark element so the name glows in yellow. The visible
+// word is always lowercase.
 func wordmark(s string) template.HTML {
 	if s == "" {
 		return ""
 	}
 	esc := html.EscapeString(s)
-	return template.HTML(productName.ReplaceAllStringFunc(esc, func(m string) string {
-		return `<span class="gh-word">` + m + `</span>`
-	}))
+	return template.HTML(productName.ReplaceAllString(esc, `<span class="gh-word">ghook</span>`))
 }
 
 // pathcode renders a slash-separated label or path as a code chip that may

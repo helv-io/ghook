@@ -9,10 +9,10 @@ func TestWordmark(t *testing.T) {
 		{"", ""},
 		{"nothing here", "nothing here"},
 		{"administer ghook.", `administer <span class="gh-word">ghook</span>.`},
-		{"Ghook is self-hosted", `<span class="gh-word">Ghook</span> is self-hosted`},
+		{"Ghook is self-hosted", `<span class="gh-word">ghook</span> is self-hosted`},
 		{"ghook's access", `<span class="gh-word">ghook</span>&#39;s access`},
 		{"Ghook does not sell data. Ghook does not share data.",
-			`<span class="gh-word">Ghook</span> does not sell data. <span class="gh-word">Ghook</span> does not share data.`},
+			`<span class="gh-word">ghook</span> does not sell data. <span class="gh-word">ghook</span> does not share data.`},
 		{`<script>ghook</script>`, `&lt;script&gt;<span class="gh-word">ghook</span>&lt;/script&gt;`},
 	}
 	for _, c := range cases {

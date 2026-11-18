@@ -108,9 +108,9 @@ func (w *Worker) Step(ctx context.Context) {
 	}
 	now := w.now()
 	saved := w.DB
-	if wss, err := saved.Unscoped().Workspaces(); err == nil && len(wss) > 0 {
-		for _, ws := range wss {
-			w.DB = saved.Use(ws.ID)
+	if users, err := saved.Unscoped().Users(); err == nil && len(users) > 0 {
+		for _, u := range users {
+			w.DB = saved.Use(u.ID)
 			w.digests(ctx, now)
 		}
 	} else {
@@ -122,8 +122,8 @@ func (w *Worker) Step(ctx context.Context) {
 		return
 	}
 	for _, d := range due {
-		if d.WorkspaceID != 0 {
-			w.DB = saved.Use(d.WorkspaceID)
+		if d.UserID != 0 {
+			w.DB = saved.Use(d.UserID)
 		} else {
 			w.DB = saved
 		}
@@ -534,7 +534,7 @@ func (w *Worker) SendTest(ctx context.Context, db *store.DB, targetID int64) (st
 	now := w.now()
 	p := Payload{
 		Source: "ghook", Route: "test", Account: "test@example.com", MessageID: "test",
-		ThreadID: "test", From: "ghook@example.com", To: "you@example.com", Subject: "Ghook test",
+		ThreadID: "test", From: "ghook@example.com", To: "you@example.com", Subject: "ghook test",
 		Date: now.UTC().Format(time.RFC3339), Labels: []string{"INBOX"}, Category: "primary",
 		Snippet: "This is a test delivery from ghook.", GmailURL: "https://mail.google.com/mail/",
 		DeliveryID: "pending",

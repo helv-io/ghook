@@ -1,9 +1,9 @@
 // Package config loads the few settings that have to exist before the database
-// is open. Everything else is a WebUI setting stored in SQLite.
+// is open. Everything else is a WebUI setting stored in SQLite, per user.
 package config
 
 import (
-	"net"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,32 +11,27 @@ import (
 )
 
 // Version is the release stamped into the UI and the User-Agent.
-const Version = "0.1.2"
+const Version = "0.1.3"
 
 // Config holds boot configuration.
 type Config struct {
-	PublicURL        string
-	Listen           string
-	DBPath           string
-	SecretsKey       string
-	KeyFile          string
-	OIDCIssuer       string
-	OIDCClientID     string
-	OIDCClientSecret string
-	OIDCScopes       string
-	OIDCRedirectURL  string
-	OIDCEmails       []string
-	OIDCGroups       []string
-	LogLevel         string
-	PUID             int
-	PGID             int
-	AuthMode         string
-	ProxyUser        string
-	ProxyEmail       string
-	ProxyName        string
-	ProxyGroups      string
-	ProxyFallback    string
-	Trust            []*net.IPNet
+	PublicURL     string
+	Listen        string
+	DBPath        string
+	SecretsKey    string
+	KeyFile       string
+	GoogleClient  string
+	PubSubProject string
+	PubSubTopic   string
+	PubSubSub     string
+	PubSubSA      string
+	MetricsToken  string
+	MaxTargets    int
+	MaxRoutes     int
+	MaxDeliveries int
+	LogLevel      string
+	PUID          int
+	PGID          int
 }
 
 func env(k, def string) string {
@@ -46,35 +41,22 @@ func env(k, def string) string {
 	return def
 }
 
-func splitList(s string) []string {
-	var out []string
-	for _, p := range strings.Split(s, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 func intEnv(k string, def int) int {
 	n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(k)))
-	if err != nil || n < 0 || n > 65535 {
+	if err != nil || n < 0 {
 		return def
 	}
 	return n
 }
 
-// OIDCEnabled reports whether admin sign-in is configured.
-func (c *Config) OIDCEnabled() bool {
-	return c.OIDCIssuer != "" && c.OIDCClientID != "" && c.OIDCClientSecret != ""
-}
-
-// OIDCRedirect is the callback registered at the identity provider.
-func (c *Config) OIDCRedirect() string {
-	if c.OIDCRedirectURL != "" {
-		return c.OIDCRedirectURL
+func fileOrEnv(fileKey, rawKey string) string {
+	if p := strings.TrimSpace(os.Getenv(fileKey)); p != "" {
+		b, err := os.ReadFile(p)
+		if err == nil {
+			return string(b)
+		}
 	}
-	return strings.TrimRight(c.PublicURL, "/") + "/admin/oidc/callback"
+	return strings.TrimSpace(os.Getenv(rawKey))
 }
 
 // GoogleRedirect is the OAuth callback registered on the Google client.
@@ -87,23 +69,35 @@ func (c *Config) PushEndpoint() string {
 	return strings.TrimRight(c.PublicURL, "/") + "/hooks/pubsub"
 }
 
+// Ready reports whether Google sign-in can start.
+func (c *Config) Ready() bool {
+	return strings.TrimSpace(c.GoogleClient) != "" && strings.TrimSpace(c.PublicURL) != ""
+}
+
+// PubSubReady reports whether the shared pull subscription is configured.
+func (c *Config) PubSubReady() bool {
+	return c.PubSubProject != "" && c.PubSubTopic != "" && c.PubSubSub != "" && c.PubSubSA != ""
+}
+
 // Load reads the environment.
 func Load() *Config {
 	c := &Config{
-		PublicURL:        strings.TrimRight(env("PUBLIC_URL", "http://localhost:8080"), "/"),
-		Listen:           env("LISTEN_ADDR", ":8080"),
-		DBPath:           env("DB_PATH", "/data/ghook.db"),
-		SecretsKey:       strings.TrimSpace(os.Getenv("SECRETS_KEY")),
-		OIDCIssuer:       strings.TrimRight(strings.TrimSpace(os.Getenv("OIDC_ISSUER")), "/"),
-		OIDCClientID:     strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID")),
-		OIDCClientSecret: strings.TrimSpace(os.Getenv("OIDC_CLIENT_SECRET")),
-		OIDCScopes:       env("OIDC_SCOPES", "openid profile email groups"),
-		OIDCRedirectURL:  strings.TrimSpace(os.Getenv("OIDC_REDIRECT_URL")),
-		OIDCEmails:       splitList(os.Getenv("OIDC_ALLOWED_EMAILS")),
-		OIDCGroups:       splitList(os.Getenv("OIDC_ALLOWED_GROUPS")),
-		LogLevel:         strings.ToLower(env("LOG_LEVEL", "info")),
-		PUID:             intEnv("PUID", 1000),
-		PGID:             intEnv("PGID", 1000),
+		PublicURL:     strings.TrimRight(env("PUBLIC_URL", "http://localhost:8080"), "/"),
+		Listen:        env("LISTEN_ADDR", ":8080"),
+		DBPath:        env("DB_PATH", "/data/ghook.db"),
+		SecretsKey:    strings.TrimSpace(os.Getenv("SECRETS_KEY")),
+		GoogleClient:  fileOrEnv("GOOGLE_CLIENT_FILE", "GOOGLE_CLIENT_JSON"),
+		PubSubProject: strings.TrimSpace(os.Getenv("PUBSUB_PROJECT")),
+		PubSubTopic:   env("PUBSUB_TOPIC", "gmail-inbox"),
+		PubSubSub:     env("PUBSUB_SUBSCRIPTION", "ghook-pull"),
+		PubSubSA:      fileOrEnv("PUBSUB_SA_FILE", "PUBSUB_SA_JSON"),
+		MetricsToken:  strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
+		MaxTargets:    intEnv("MAX_TARGETS", 25),
+		MaxRoutes:     intEnv("MAX_ROUTES", 50),
+		MaxDeliveries: intEnv("MAX_DELIVERIES_PER_DAY", 1000),
+		LogLevel:      strings.ToLower(env("LOG_LEVEL", "info")),
+		PUID:          intEnv("PUID", 1000),
+		PGID:          intEnv("PGID", 1000),
 	}
 	if c.PUID == 0 {
 		c.PUID = 1000
@@ -111,7 +105,32 @@ func Load() *Config {
 	if c.PGID == 0 {
 		c.PGID = 1000
 	}
+	if c.MaxTargets < 1 {
+		c.MaxTargets = 25
+	}
+	if c.MaxRoutes < 1 {
+		c.MaxRoutes = 50
+	}
+	if c.MaxDeliveries < 1 {
+		c.MaxDeliveries = 1000
+	}
 	c.KeyFile = filepath.Join(filepath.Dir(c.DBPath), "secrets.key")
-	c.applyAuth()
+	if c.PubSubProject == "" {
+		c.PubSubProject = projectFromSA(c.PubSubSA)
+	}
 	return c
+}
+
+func projectFromSA(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	var doc struct {
+		ProjectID string `json:"project_id"`
+	}
+	if json.Unmarshal([]byte(raw), &doc) != nil {
+		return ""
+	}
+	return strings.TrimSpace(doc.ProjectID)
 }

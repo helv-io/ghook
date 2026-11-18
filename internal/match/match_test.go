@@ -47,11 +47,26 @@ func TestFromAddressAndDomain(t *testing.T) {
 	if !(Spec{From: []string{"*.capitalone.com"}}).Match(sub) {
 		t.Fatal("*.domain must match a subdomain")
 	}
+	if !(Spec{From: []string{"*.capitalone.com"}}).Match(mail.Message{From: "a@alerts.email.capitalone.com"}) {
+		t.Fatal("*.domain must match a nested subdomain")
+	}
+	if !(Spec{From: []string{"*.CapitalOne.COM"}}).Match(mail.Message{From: "ALERTS@Notification.CapitalOne.com"}) {
+		t.Fatal("*.domain is case-insensitive")
+	}
+	if (Spec{From: []string{"*.capitalone.com"}}).Match(mail.Message{From: "alerts@capitalone.com"}) {
+		t.Fatal("*.domain must not match the apex")
+	}
+	if (Spec{From: []string{"*.capitalone.com"}}).Match(mail.Message{From: "eve@notcapitalone.com"}) {
+		t.Fatal("*.domain must not match a lookalike")
+	}
 	if (Spec{From: []string{"capitalone.com"}}).Match(mail.Message{From: "eve@notcapitalone.com"}) {
 		t.Fatal("suffix lookalike must not match")
 	}
 	if (Spec{From: []string{"capitalone.com"}}).Match(mail.Message{From: "eve@example.com"}) {
 		t.Fatal("unrelated domain must not match")
+	}
+	if !(Spec{From: []string{"capitalone.com"}}).Match(mail.Message{From: "alerts@capitalone.com"}) {
+		t.Fatal("bare domain must still match the apex")
 	}
 }
 
@@ -156,16 +171,23 @@ func TestDecideFirstWinsContinueFallback(t *testing.T) {
 }
 
 func TestLabelConvention(t *testing.T) {
-	got := LabelTargets("Ghook", []string{"INBOX", "Ghook/CFO", "ghook/ceo", "Ghook/Routed/CFO", "Ghook/CFO/extra", "Other/X"})
+	// Existing Gmail labels may still use the old "Ghook/" capitalization.
+	got := LabelTargets("ghook", []string{"INBOX", "Ghook/CFO", "ghook/ceo", "Ghook/Routed/CFO", "Ghook/CFO/extra", "Other/X"})
 	joined := strings.Join(got, ",")
 	if joined != "CFO,ceo" {
 		t.Fatalf("targets: %s", joined)
 	}
+	if LabelTargets("Ghook", []string{"ghook/Ops"})[0] != "Ops" {
+		t.Fatal("prefix comparison is case-insensitive")
+	}
 	if LabelTargets("", []string{"Ghook/Ops"})[0] != "Ops" {
-		t.Fatal("default prefix")
+		t.Fatal("default prefix still matches existing Ghook/ labels")
+	}
+	if RoutedLabel("", "CFO") != "ghook/Routed/CFO" {
+		t.Fatal(RoutedLabel("", "CFO"))
 	}
 	if RoutedLabel("Ghook", "CFO") != "Ghook/Routed/CFO" {
-		t.Fatal(RoutedLabel("Ghook", "CFO"))
+		t.Fatal("an explicit stored prefix is kept as written")
 	}
 }
 
@@ -191,6 +213,6 @@ func TestDecideClaimedSuppressesFallback(t *testing.T) {
 	}
 	hits = DecideClaimed(routes, m, true)
 	if len(hits) != 0 {
-		t.Fatalf("claimed by a Ghook/ label must not fall back: %+v", names(hits))
+		t.Fatalf("claimed by a ghook/ label must not fall back: %+v", names(hits))
 	}
 }

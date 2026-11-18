@@ -11,6 +11,18 @@ import (
 	"github.com/helv-io/ghook/internal/mail"
 )
 
+// DefaultPrefix is the Gmail label prefix used when the setting is empty.
+const DefaultPrefix = "ghook"
+
+// Prefix returns the configured label prefix, or DefaultPrefix when empty.
+func Prefix(p string) string {
+	p = strings.Trim(strings.TrimSpace(p), "/")
+	if p == "" {
+		return DefaultPrefix
+	}
+	return p
+}
+
 // Spec is one route's filter. An empty spec matches every message.
 // Lists inside one field are OR (any sender, any label). Fields combine with Op.
 type Spec struct {
@@ -258,19 +270,26 @@ func domainOf(addr string) string {
 	return ""
 }
 
-// domainMatch reports whether got is pat or a subdomain of pat.
-// A leading "*." on the pattern is ignored, so "*.example.com" and
-// "example.com" both match notification.example.com. A lookalike such
-// as notexample.com does not match example.com.
+// domainMatch reports whether the message domain got matches pattern pat.
+// Comparison is case-insensitive.
+//
+//	example.com      the apex or any subdomain
+//	*.example.com    any subdomain of example.com, not the apex itself
+//
+// A lookalike such as notexample.com does not match example.com.
 func domainMatch(got, pat string) bool {
 	got = strings.ToLower(strings.TrimSpace(got))
 	pat = strings.ToLower(strings.TrimSpace(pat))
-	pat = strings.TrimPrefix(pat, "*.")
+	subOnly := false
+	if strings.HasPrefix(pat, "*.") {
+		subOnly = true
+		pat = strings.TrimPrefix(pat, "*.")
+	}
 	if got == "" || pat == "" {
 		return false
 	}
 	if got == pat {
-		return true
+		return !subOnly
 	}
 	return strings.HasSuffix(got, "."+pat)
 }
@@ -302,7 +321,7 @@ func subjectMatch(expr, subject string) bool {
 
 // Decide walks routes in order. Disabled routes are skipped. Fallback routes
 // run only when no earlier route matched and the message is not already
-// claimed (for example by a Ghook/ label).
+// claimed (for example by a ghook/ label).
 func Decide(routes []Route, m mail.Message) []Route {
 	return DecideClaimed(routes, m, false)
 }
@@ -339,14 +358,13 @@ func DecideClaimed(routes []Route, m mail.Message, claimed bool) []Route {
 	return hits
 }
 
-// LabelTargets returns target names implied by labels such as "Ghook/CFO".
-// The segment after the prefix is the target name. Labels under
-// "<prefix>/Routed/..." are the labels ghook itself applies and are ignored.
+// LabelTargets returns target names implied by labels such as "ghook/CFO".
+// The segment after the prefix is the target name. Comparison is
+// case-insensitive, so an existing Gmail label "Ghook/CFO" still matches
+// the default prefix "ghook". Labels under "<prefix>/Routed/..." are the
+// labels ghook itself applies and are ignored.
 func LabelTargets(prefix string, labels []string) []string {
-	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
-	if prefix == "" {
-		prefix = "Ghook"
-	}
+	prefix = Prefix(prefix)
 	var out []string
 	seen := map[string]bool{}
 	head := prefix + "/"
@@ -375,9 +393,5 @@ func LabelTargets(prefix string, labels []string) []string {
 
 // RoutedLabel is the label applied to mail that was sent to a target.
 func RoutedLabel(prefix, target string) string {
-	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
-	if prefix == "" {
-		prefix = "Ghook"
-	}
-	return prefix + "/Routed/" + strings.TrimSpace(target)
+	return Prefix(prefix) + "/Routed/" + strings.TrimSpace(target)
 }

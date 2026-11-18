@@ -14,74 +14,9 @@ import (
 	"github.com/helv-io/ghook/internal/engine"
 	"github.com/helv-io/ghook/internal/gmailx"
 	"github.com/helv-io/ghook/internal/match"
-	"github.com/helv-io/ghook/internal/pubsubx"
 	"github.com/helv-io/ghook/internal/store"
-	"github.com/helv-io/ghook/internal/when"
 	"google.golang.org/api/idtoken"
 )
-
-func (s *Server) verifyPubSub(w http.ResponseWriter, r *http.Request, _ page) {
-	api, ps, err := s.pubsubAPI(r)
-	if err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", safeErr(err))
-		return
-	}
-	topic := pubsubx.TopicPath(ps.Project, ps.Topic)
-	sub := pubsubx.SubPath(ps.Project, ps.Subscription)
-	tOK, tErr := api.Exists(r.Context(), topic)
-	sOK, sErr := api.Exists(r.Context(), sub)
-	msg := fmt.Sprintf("topic %s, subscription %s", yesno(tOK, tErr), yesno(sOK, sErr))
-	kind := "ok"
-	if tErr != nil || sErr != nil || !tOK || !sOK {
-		kind = "warn"
-	}
-	s.redirect(w, r, "/admin/accounts", kind, msg)
-}
-
-func yesno(ok bool, err error) string {
-	if err != nil {
-		return "error"
-	}
-	if ok {
-		return "exists"
-	}
-	return "missing"
-}
-
-func (s *Server) createPubSub(w http.ResponseWriter, r *http.Request, p page) {
-	api, ps, err := s.pubsubAPI(r)
-	if err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", safeErr(err))
-		return
-	}
-	topic := pubsubx.TopicPath(ps.Project, ps.Topic)
-	sub := pubsubx.SubPath(ps.Project, ps.Subscription)
-	if err := api.CreateTopic(r.Context(), topic); err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", "Could not create the topic.")
-		return
-	}
-	if err := api.CreateSubscription(r.Context(), sub, topic); err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", "Could not create the subscription.")
-		return
-	}
-	s.db(r).Audit(p.User, "pubsub.create", topic)
-	s.redirect(w, r, "/admin/accounts", "ok", "Topic and pull subscription are ready.")
-}
-
-func (s *Server) grantPubSub(w http.ResponseWriter, r *http.Request, p page) {
-	api, ps, err := s.pubsubAPI(r)
-	if err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", safeErr(err))
-		return
-	}
-	topic := pubsubx.TopicPath(ps.Project, ps.Topic)
-	if err := api.GrantGmailPublish(r.Context(), topic); err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", "Could not grant publish. The credentials need Pub/Sub admin on the topic.")
-		return
-	}
-	s.db(r).Audit(p.User, "pubsub.grant", topic)
-	s.redirect(w, r, "/admin/accounts", "ok", "Gmail can publish to the topic.")
-}
 
 func (s *Server) mailbox(w http.ResponseWriter, r *http.Request) (store.Account, gmailx.Client, bool) {
 	id, _ := strconv.ParseInt(r.FormValue("account"), 10, 64)
@@ -155,7 +90,7 @@ func (s *Server) routeEdit(w http.ResponseWriter, r *http.Request, p page) {
 	p.Title, p.Nav = "route", "routes"
 	p.Targets, _ = s.db(r).Targets()
 	p.Categories = []string{"primary", "social", "promotions", "updates", "forums"}
-	p.LabelPrefix = s.db(r).Setting("label_prefix", "Ghook")
+	p.LabelPrefix = s.db(r).Setting("label_prefix", match.DefaultPrefix)
 	p.IsNew = strings.HasSuffix(r.URL.Path, "/new")
 	if !p.IsNew {
 		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -203,6 +138,10 @@ func (s *Server) routeSave(w http.ResponseWriter, r *http.Request, p page) {
 		s.routeForm(w, r, p, rt, err.Error(), nil)
 		return
 	}
+	if rt.ID == 0 && s.db(r).RouteCount() >= s.RT.Cfg.MaxRoutes {
+		s.routeForm(w, r, p, rt, store.ErrQuota{Kind: "routes", Max: s.RT.Cfg.MaxRoutes}.Error(), nil)
+		return
+	}
 	saved, err := s.db(r).SaveRoute(rt)
 	if err != nil {
 		s.routeForm(w, r, p, rt, safeErr(err), nil)
@@ -216,7 +155,7 @@ func (s *Server) routeForm(w http.ResponseWriter, r *http.Request, p page, rt st
 	p.Title, p.Nav = "route", "routes"
 	p.Targets, _ = s.db(r).Targets()
 	p.Categories = []string{"primary", "social", "promotions", "updates", "forums"}
-	p.LabelPrefix = s.db(r).Setting("label_prefix", "Ghook")
+	p.LabelPrefix = s.db(r).Setting("label_prefix", match.DefaultPrefix)
 	p.Route = rt
 	p.IsNew = rt.ID == 0
 	p.Err = err
@@ -391,6 +330,13 @@ func (s *Server) targetSave(w http.ResponseWriter, r *http.Request, p page) {
 		s.render(w, "target_edit", p)
 		return
 	}
+	if t.ID == 0 && s.db(r).TargetCount() >= s.RT.Cfg.MaxTargets {
+		p.Err = store.ErrQuota{Kind: "targets", Max: s.RT.Cfg.MaxTargets}.Error()
+		p.Target = t
+		p.Title, p.Nav = "target", "targets"
+		s.render(w, "target_edit", p)
+		return
+	}
 	saved, err := s.db(r).SaveTarget(t, r.FormValue("secret"), r.FormValue("clear_secret") == "1")
 	if err != nil {
 		p.Err = safeErr(err)
@@ -479,7 +425,7 @@ func (s *Server) deliveryReplay(w http.ResponseWriter, r *http.Request, p page) 
 }
 
 func (s *Server) deliveryWindow(w http.ResponseWriter, r *http.Request, p page) {
-	n, err := s.db(r).ReplayWindow(strings.TrimSpace(r.FormValue("route")), strings.TrimSpace(r.FormValue("target")), parseTime(r.FormValue("since"), s.loc()), parseTime(r.FormValue("until"), s.loc()))
+	n, err := s.db(r).ReplayWindow(strings.TrimSpace(r.FormValue("route")), strings.TrimSpace(r.FormValue("target")), parseTime(r.FormValue("since"), s.locOf(r)), parseTime(r.FormValue("until"), s.locOf(r)))
 	if err != nil {
 		s.redirect(w, r, "/admin/deliveries", "bad", "Could not replay that window.")
 		return
@@ -488,70 +434,15 @@ func (s *Server) deliveryWindow(w http.ResponseWriter, r *http.Request, p page) 
 	s.redirect(w, r, "/admin/deliveries", "ok", fmt.Sprintf("Re-queued %d deliveries.", n))
 }
 
-func (s *Server) members(w http.ResponseWriter, r *http.Request, p page) {
-	p.Title, p.Nav = "members", "members"
-	p.Members, _ = s.RT.DB.Members(p.WorkspaceID)
-	_, _, cl, _ := s.parseSession(r)
-	if u, ok, _ := s.RT.DB.UserBySubject(cl.Sub); ok {
-		p.InstanceAdmin = u.InstanceAdmin
-	}
-	p.AutoProvision = s.RT.DB.Instance().BoolSetting("proxy_auto_provision", true)
-	p.FallbackUser = s.fallbackUser()
-	s.render(w, "members", p)
-}
-
-func (s *Server) membersSave(w http.ResponseWriter, r *http.Request, p page) {
-	if r.FormValue("kind") == "provision" {
-		v := "0"
-		if r.FormValue("auto") == "1" {
-			v = "1"
-		}
-		_ = s.RT.DB.Instance().SetSetting("proxy_auto_provision", v)
-		_ = s.RT.DB.Instance().SetSetting("proxy_fallback_user", strings.TrimSpace(r.FormValue("fallback")))
-		s.redirect(w, r, "/admin/members", "ok", "Proxy options saved.")
-		return
-	}
-	if err := s.RT.DB.Invite(p.WorkspaceID, r.FormValue("email"), r.FormValue("role")); err != nil {
-		s.redirect(w, r, "/admin/members", "bad", safeErr(err))
-		return
-	}
-	s.db(r).Audit(p.User, "member.invite", r.FormValue("email"))
-	s.redirect(w, r, "/admin/members", "ok", "Member updated.")
-}
-
-func (s *Server) switchWorkspace(w http.ResponseWriter, r *http.Request, _ page) {
-	http.SetCookie(w, &http.Cookie{Name: "ghook_ws", Value: r.FormValue("workspace"), Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.secure()})
-	http.Redirect(w, r, "/admin", http.StatusSeeOther)
-}
-
-func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request, p page) {
-	_, _, cl, _ := s.parseSession(r)
-	u, ok, _ := s.RT.DB.UserBySubject(cl.Sub)
-	if !ok || !u.InstanceAdmin {
-		http.Error(w, "only an instance admin can create a workspace", http.StatusForbidden)
-		return
-	}
-	_, err := s.RT.DB.CreateWorkspace(r.FormValue("name"), u.ID)
-	if err != nil {
-		s.redirect(w, r, "/admin/members", "bad", safeErr(err))
-		return
-	}
-	s.redirect(w, r, "/admin/members", "ok", "Workspace created. Switch to it from the header when you want.")
-}
-
-func parseTime(s string, loc *time.Location) int64 {
-	return when.Parse(s, loc)
-}
-
 func (s *Server) settings(w http.ResponseWriter, r *http.Request, p page) {
 	p.Title, p.Nav = "settings", "settings"
-	s.fillSettings(&p)
+	s.fillSettings(r, &p)
 	s.render(w, "settings", p)
 }
 
-func (s *Server) fillSettings(p *page) {
-	db := s.RT.DB
-	p.LabelPrefix = db.Setting("label_prefix", "Ghook")
+func (s *Server) fillSettings(r *http.Request, p *page) {
+	db := s.db(r)
+	p.LabelPrefix = db.Setting("label_prefix", match.DefaultPrefix)
 	p.LabelConvention = db.BoolSetting("label_convention", true)
 	p.Catchup = db.IntSetting("catchup_minutes", 30)
 	p.ResyncDays = db.IntSetting("resync_days", 2)
@@ -565,12 +456,19 @@ func (s *Server) fillSettings(p *page) {
 	p.NotifyDead = db.BoolSetting("notify_dead", true)
 	p.NotifyWatch = db.BoolSetting("notify_watch", true)
 	p.Targets, _ = db.Targets()
+	p.TargetCount, p.RouteCount = db.TargetCount(), db.RouteCount()
+	day := time.Now().UTC().Truncate(24 * time.Hour).Unix()
+	p.TodayCount = db.DeliveriesSince(day)
 }
 
 func (s *Server) settingsSave(w http.ResponseWriter, r *http.Request, p page) {
-	db := s.RT.DB
+	db := s.db(r)
+	prefix := strings.TrimSpace(r.FormValue("label_prefix"))
+	if strings.EqualFold(prefix, match.DefaultPrefix) {
+		prefix = match.DefaultPrefix
+	}
 	pairs := [][2]string{
-		{"label_prefix", strings.TrimSpace(r.FormValue("label_prefix"))},
+		{"label_prefix", prefix},
 		{"label_convention", on(r, "label_convention")},
 		{"catchup_minutes", r.FormValue("catchup_minutes")},
 		{"resync_days", r.FormValue("resync_days")},
@@ -602,7 +500,7 @@ func (s *Server) settingsSave(w http.ResponseWriter, r *http.Request, p page) {
 }
 
 func (s *Server) exportYAML(w http.ResponseWriter, r *http.Request, _ page) {
-	raw, err := bundle.Export(s.RT.DB, r.FormValue("passphrase"))
+	raw, err := bundle.Export(s.db(r), r.FormValue("passphrase"))
 	if err != nil {
 		s.redirect(w, r, "/admin/settings", "bad", "Could not export.")
 		return
@@ -621,7 +519,7 @@ func (s *Server) importYAML(w http.ResponseWriter, r *http.Request, p page) {
 			raw = string(b)
 		}
 	}
-	msg, err := bundle.Import(s.RT.DB, []byte(raw), r.FormValue("passphrase"))
+	msg, err := bundle.Import(s.db(r), []byte(raw), r.FormValue("passphrase"))
 	if err != nil {
 		s.redirect(w, r, "/admin/settings", "bad", safeErr(err))
 		return
@@ -647,20 +545,43 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
+	want := ""
+	if s.RT != nil && s.RT.Cfg != nil {
+		want = s.RT.Cfg.MetricsToken
+	}
+	if want == "" {
+		http.NotFound(w, r)
+		return
+	}
+	got := ""
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(h), "bearer ") {
+		got = strings.TrimSpace(h[7:])
+	}
+	if got == "" {
+		got = r.URL.Query().Get("token")
+	}
+	if got != want {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	db := s.RT.DB.Unscoped()
+	counts, _ := db.DeliveryCounts()
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	counts, _ := s.db(r).DeliveryCounts()
 	fmt.Fprintf(w, "ghook_up 1\n")
+	fmt.Fprintf(w, "ghook_users %d\n", db.UserCount())
 	fmt.Fprintf(w, "ghook_deliveries{status=\"queued\"} %d\n", counts.Queued)
 	fmt.Fprintf(w, "ghook_deliveries{status=\"retry\"} %d\n", counts.Retry)
 	fmt.Fprintf(w, "ghook_deliveries{status=\"dead\"} %d\n", counts.Dead)
 	fmt.Fprintf(w, "ghook_deliveries{status=\"sent\"} %d\n", counts.Sent)
-	accs, _ := s.db(r).Accounts()
+	accs, _ := db.Accounts()
+	var watches int
 	for _, a := range accs {
-		fmt.Fprintf(w, "ghook_watch_expiry_unixtime{account=%q} %d\n", prom(a.Email), a.WatchExpiry)
-		if a.LastNotify > 0 {
-			fmt.Fprintf(w, "ghook_last_notification_unixtime{account=%q} %d\n", prom(a.Email), a.LastNotify)
+		if a.WatchExpiry > 0 && a.WatchError == "" {
+			watches++
 		}
 	}
+	fmt.Fprintf(w, "ghook_watches_active %d\n", watches)
 }
 
 func prom(s string) string {
@@ -682,18 +603,9 @@ func (s *Server) push(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	ps := s.db(r).LoadPubSub()
-	aud := ps.PushAudience
-	if aud == "" {
-		aud = s.RT.Cfg.PushEndpoint()
-	}
+	aud := s.RT.Cfg.PushEndpoint()
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	email, err := s.checkPush(r, strings.TrimSpace(token), aud)
-	if err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	if ps.PushEmail != "" && !strings.EqualFold(email, ps.PushEmail) {
+	if _, err := s.checkPush(r, strings.TrimSpace(token), aud); err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -727,4 +639,20 @@ func (s *Server) checkPush(r *http.Request, raw, aud string) (string, error) {
 func atoi(s string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(s))
 	return n
+}
+
+func parseTime(s string, loc *time.Location) int64 {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	if loc == nil {
+		loc = time.UTC
+	}
+	for _, layout := range []string{"2006-01-02", "2006-01-02T15:04", "2006-01-02 15:04", time.RFC3339} {
+		if t, err := time.ParseInLocation(layout, s, loc); err == nil {
+			return t.Unix()
+		}
+	}
+	return 0
 }

@@ -1,0 +1,19 @@
+{{define "body"}}
+<h2>Your account</h2>
+{{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
+<div class="card">
+<p>{{if .UserEmail}}<code>{{.UserEmail}}</code>{{else}}{{.User}}{{end}}</p>
+<p class="muted">Signed in with Google. This mailbox is the one <span class="gh-word">ghook</span> watches, on a shared topic, and only you can see the routes, targets and deliveries that belong to it.</p>
+</div>
+<form method="post" action="/admin/logout" class="row"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn" type="submit">Sign out</button></form>
+
+<h2>Delete my account and data</h2>
+<div class="card">
+<p>This stops the Gmail watch, revokes the Google token, and deletes your routes, targets, deliveries, settings and mailbox state. It cannot be undone.</p>
+<form method="post" action="/admin/account/delete">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<label class="check"><input type="checkbox" name="confirm" value="1" required> I understand this deletes my <span class="gh-word">ghook</span> data</label>
+<div class="row"><button class="act danger" type="submit" data-confirm="Delete your account and all data?" data-confirm-danger="1">Delete my account and data</button></div>
+</form>
+</div>
+{{end}}

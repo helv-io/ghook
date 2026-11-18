@@ -47,14 +47,14 @@ func New(key []byte) (*Box, error) {
 	return &Box{aead: a, key: k}, nil
 }
 
-// Derive returns a box whose key is bound to one workspace. A secret sealed
-// for workspace A does not open in workspace B. The instance key stays in /data.
-func (b *Box) Derive(workspaceID int64) *Box {
-	if b == nil || workspaceID == 0 {
+// Derive returns a box whose key is bound to one user. A secret sealed
+// for user A does not open in user B. The instance key stays in /data.
+func (b *Box) Derive(userID int64) *Box {
+	if b == nil || userID == 0 {
 		return b
 	}
 	m := hmac.New(sha256.New, b.key)
-	_, _ = fmt.Fprintf(m, "ghook/workspace/%d", workspaceID)
+	_, _ = fmt.Fprintf(m, "ghook/user/%d", userID)
 	out, err := New(m.Sum(nil))
 	if err != nil {
 		panic(err)

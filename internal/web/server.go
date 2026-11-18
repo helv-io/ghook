@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/helv-io/ghook/internal/auth"
 	"github.com/helv-io/ghook/internal/config"
 	"github.com/helv-io/ghook/internal/engine"
 	"github.com/helv-io/ghook/internal/feed"
 	"github.com/helv-io/ghook/internal/match"
-	"github.com/helv-io/ghook/internal/oidcauth"
 	"github.com/helv-io/ghook/internal/runtime"
 	"github.com/helv-io/ghook/internal/store"
 )
@@ -42,7 +42,6 @@ type PushVerifier func(ctx *http.Request, raw, audience string) (email string, e
 // Server is the HTTP front of one runtime.
 type Server struct {
 	RT     *runtime.App
-	OIDC   *oidcauth.Client
 	Verify func(r *http.Request, raw, audience string) (email string, err error)
 
 	tpl       map[string]*template.Template
@@ -58,8 +57,8 @@ type sessionStore struct {
 }
 
 type sessionInfo struct {
-	who, idToken string
-	exp          time.Time
+	who string
+	exp time.Time
 }
 
 type sessionClaims struct {
@@ -89,19 +88,18 @@ type health struct {
 
 // page is the view model for every template. Unused fields stay zero.
 type page struct {
-	Title, Nav, CSRF, User, Version, Public string
-	Solo                                    bool
-	Toasts                                  []toast
-	Err                                     string
-	OIDCRedirect, GoogleRedirect, PushURL   string
+	Title, Nav, CSRF, User, UserEmail, Version, Public string
+	Solo, Ready                                        bool
+	Banner                                             string
+	Toasts                                             []toast
+	Err                                                string
+	GoogleRedirect, PushURL                            string
 
 	Accounts      []store.Account
 	HasClient     bool
 	ClientID      string
 	Modify        bool
 	SettingsScope bool
-	PubSubScope   bool
-	Pub           store.PubSub
 	LabelPrefix   string
 	Labels        []labelView
 	LabelAccount  int64
@@ -132,30 +130,19 @@ type page struct {
 	Catchup, ResyncDays, RetryAttempts, RetryHours, RetryBase, Retention int
 	Timezone                                                             string
 	NotifyTarget                                                         int64
-	NotifyDead, NotifyWatch, RetainBodies, InstanceAdmin, AutoProvision  bool
-	FallbackUser, WorkspaceName                                          string
-
-	ShowTeam, ShowSwitcher bool
-	Banner, Role, AuthMode string
-	WorkspaceID            int64
-	Workspaces             []store.Workspace
-	Members                []store.Membership
+	NotifyDead, NotifyWatch, RetainBodies                                bool
+	MaxTargets, MaxRoutes, MaxDeliveries                                 int
+	TargetCount, RouteCount, TodayCount                                  int
 }
 
 type labelView struct {
 	ID, Name string
 }
 
-// New parses templates and prepares OIDC when it is configured.
+// New parses templates and returns a server.
 func New(rt *runtime.App) (*Server, error) {
 	s := &Server{RT: rt, tpl: map[string]*template.Template{}}
-	if rt.Cfg.AuthMode == config.AuthOIDC && rt.Cfg.OIDCEnabled() {
-		s.OIDC = oidcauth.New(oidcauth.Config{
-			Issuer: rt.Cfg.OIDCIssuer, ClientID: rt.Cfg.OIDCClientID, ClientSecret: rt.Cfg.OIDCClientSecret,
-			Scopes: rt.Cfg.OIDCScopes, AllowedEmails: rt.Cfg.OIDCEmails, AllowedGroups: rt.Cfg.OIDCGroups,
-		}, s.secret, rt.Cfg.OIDCRedirect, s.secure)
-	}
-	names := []string{"dashboard", "accounts", "routes", "route_edit", "targets", "target_edit", "deliveries", "delivery", "settings", "audit", "signedout", "notconfigured", "autherror", "noidentity", "noworkspace", "members", "privacy", "terms"}
+	names := []string{"dashboard", "accounts", "routes", "route_edit", "targets", "target_edit", "deliveries", "delivery", "settings", "audit", "signedout", "notconfigured", "autherror", "login", "account", "privacy", "terms"}
 	for _, name := range names {
 		t, err := template.New(name).Funcs(s.funcs()).ParseFS(assets, "templates/layout.html", "templates/components.html", "templates/"+name+".html")
 		if err != nil {
@@ -192,10 +179,14 @@ func (s *Server) funcs() template.FuncMap {
 	}
 }
 
-func (s *Server) loc() *time.Location {
+func (s *Server) loc() *time.Location { return s.locOf(nil) }
+
+func (s *Server) locOf(r *http.Request) *time.Location {
 	name := "UTC"
-	if s.RT != nil && s.RT.DB != nil {
-		name = s.RT.DB.Setting("timezone", "UTC")
+	if r != nil {
+		if db := s.db(r); db != nil && db.UserID() != 0 {
+			name = db.Setting("timezone", "UTC")
+		}
 	}
 	l, err := time.LoadLocation(name)
 	if err != nil {
@@ -264,26 +255,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /terms", s.legal("terms", "Terms"))
 	mux.HandleFunc("GET /metrics", s.metrics)
 	mux.HandleFunc("POST /hooks/pubsub", s.push)
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/admin", http.StatusFound)
-	})
-	mux.HandleFunc("GET /admin/oidc/login", s.oidcLogin)
-	mux.HandleFunc("GET /admin/oidc/callback", s.oidcCallback)
+	mux.HandleFunc("GET /{$}", s.root)
+	mux.HandleFunc("GET /login", s.loginPage)
+	mux.HandleFunc("GET /auth/google", s.googleStart)
+	mux.HandleFunc("GET /admin/google/callback", s.googleCallback)
 	mux.HandleFunc("POST /admin/logout", s.guard(s.logout))
 
 	mux.HandleFunc("GET /admin", s.guard(s.dashboard))
 	mux.HandleFunc("GET /admin/events", s.guard(s.events))
 	mux.HandleFunc("GET /admin/accounts", s.guard(s.accounts))
-	mux.HandleFunc("POST /admin/accounts/client", s.guard(s.saveClient))
-	mux.HandleFunc("POST /admin/accounts/connect", s.guard(s.connect))
-	mux.HandleFunc("GET /admin/google/callback", s.guard(s.googleCallback))
+	mux.HandleFunc("POST /admin/accounts/scopes", s.guard(s.saveScopes))
 	mux.HandleFunc("POST /admin/accounts/watch", s.guard(s.renewOne))
 	mux.HandleFunc("POST /admin/accounts/pause", s.guard(s.pauseAccount))
 	mux.HandleFunc("POST /admin/accounts/disconnect", s.guard(s.disconnect))
-	mux.HandleFunc("POST /admin/accounts/pubsub", s.guard(s.savePubSub))
-	mux.HandleFunc("POST /admin/accounts/pubsub/verify", s.guard(s.verifyPubSub))
-	mux.HandleFunc("POST /admin/accounts/pubsub/create", s.guard(s.createPubSub))
-	mux.HandleFunc("POST /admin/accounts/pubsub/grant", s.guard(s.grantPubSub))
 	mux.HandleFunc("POST /admin/accounts/labels", s.guard(s.createLabel))
 	mux.HandleFunc("POST /admin/accounts/filters", s.guard(s.createFilter))
 
@@ -316,10 +300,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/export", s.guard(s.exportYAML))
 	mux.HandleFunc("POST /admin/import", s.guard(s.importYAML))
 	mux.HandleFunc("GET /admin/audit", s.guard(s.auditPage))
-	mux.HandleFunc("GET /admin/members", s.guard(s.members))
-	mux.HandleFunc("POST /admin/members", s.guard(s.membersSave))
-	mux.HandleFunc("POST /admin/workspace", s.guard(s.switchWorkspace))
-	mux.HandleFunc("POST /admin/workspaces", s.guard(s.createWorkspace))
+	mux.HandleFunc("GET /admin/account", s.guard(s.accountPage))
+	mux.HandleFunc("POST /admin/account/delete", s.guard(s.deleteAccount))
 	return secureHeaders(mux)
 }
 
@@ -348,9 +330,8 @@ func (s *Server) render(w http.ResponseWriter, name string, p page) {
 		if p.PushURL == "" {
 			p.PushURL = s.RT.Cfg.PushEndpoint()
 		}
-		if p.OIDCRedirect == "" {
-			p.OIDCRedirect = s.RT.Cfg.OIDCRedirect()
-		}
+		p.Ready = s.RT.Cfg.Ready()
+		p.MaxTargets, p.MaxRoutes, p.MaxDeliveries = s.RT.Cfg.MaxTargets, s.RT.Cfg.MaxRoutes, s.RT.Cfg.MaxDeliveries
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tpl[name].ExecuteTemplate(w, "layout", p); err != nil {
@@ -364,37 +345,17 @@ func (s *Server) guard(fn func(http.ResponseWriter, *http.Request, page)) http.H
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 			return
 		}
-		mode := s.RT.Cfg.Mode()
-		switch mode {
-		case config.AuthNone:
-			if !s.sessionOrMint(w, r, "ghook:implicit", "", "Admin") {
+		if _, ok := s.Session(r); !ok {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				http.Error(w, "sign in required", http.StatusUnauthorized)
 				return
 			}
-		case config.AuthProxy:
-			if !s.proxyAuth(w, r) {
-				return
-			}
-		default:
-			if !s.RT.Cfg.OIDCEnabled() {
-				if r.Method != http.MethodGet {
-					http.Error(w, "OIDC is not configured", http.StatusForbidden)
-					return
-				}
-				s.render(w, "notconfigured", page{Title: "Sign in", Solo: true})
-				return
-			}
-			if _, ok := s.Session(r); !ok {
-				if r.Method != http.MethodGet && r.Method != http.MethodHead {
-					http.Error(w, "sign in required", http.StatusUnauthorized)
-					return
-				}
-				s.render(w, "signedout", page{Title: "Sign in", Solo: true})
-				return
-			}
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
 		}
 		csrf, ok := s.Session(r)
 		if !ok {
-			http.Error(w, "sign in required", http.StatusUnauthorized)
+			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		}
 		if r.Method == http.MethodPost {
@@ -410,33 +371,12 @@ func (s *Server) guard(fn func(http.ResponseWriter, *http.Request, page)) http.H
 		}
 		p, ok := s.pageFor(w, r, csrf)
 		if !ok {
-			s.render(w, "noworkspace", page{Title: "No workspace", Solo: true, User: s.Label(r)})
-			return
-		}
-		if r.Method == http.MethodPost && !s.allowPost(r, p.Role) {
-			http.Error(w, "this role cannot change that", http.StatusForbidden)
+			s.clearSession(w)
+			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		}
 		fn(w, r, p)
 	}
-}
-
-func (s *Server) allowPost(r *http.Request, role string) bool {
-	if role == "owner" || role == "" {
-		return role == "owner"
-	}
-	path := r.URL.Path
-	if role == "viewer" {
-		return strings.HasSuffix(path, "/simulate") || strings.HasSuffix(path, "/preview") || path == "/admin/workspace"
-	}
-	// editor
-	switch {
-	case strings.HasPrefix(path, "/admin/settings"), strings.HasPrefix(path, "/admin/members"),
-		strings.HasPrefix(path, "/admin/accounts/client"), strings.HasPrefix(path, "/admin/accounts/pubsub"),
-		path == "/admin/workspaces":
-		return false
-	}
-	return true
 }
 
 func csrfOK(r *http.Request, want string) bool {
@@ -520,12 +460,18 @@ func (s *Server) mac(msg string) string {
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
-func (s *Server) setSession(w http.ResponseWriter, id oidcauth.Identity) {
+// IssueSession writes a session cookie for the given Google identity.
+// Tests and local screenshot tools use this; it is not an HTTP route.
+func (s *Server) IssueSession(w http.ResponseWriter, subject, email, name string) {
+	s.setSession(w, auth.Identity{Subject: subject, Email: email, Name: name, Username: name})
+}
+
+func (s *Server) setSession(w http.ResponseWriter, id auth.Identity) {
 	nonce := randToken(16)
 	exp := time.Now().Add(sessionTTL)
 	raw, _ := json.Marshal(sessionClaims{Sub: id.Subject, Email: id.Email, Label: id.Display()})
 	payload := strconv.FormatInt(exp.Unix(), 10) + "." + nonce + "." + base64.RawURLEncoding.EncodeToString(raw)
-	s.sessions.put(nonce, sessionInfo{who: id.Display(), idToken: id.IDToken, exp: exp})
+	s.sessions.put(nonce, sessionInfo{who: id.Display(), exp: exp})
 	http.SetCookie(w, &http.Cookie{
 		Name: cookieName, Value: payload + "." + s.mac(payload), Path: "/",
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.secure(), Expires: exp,

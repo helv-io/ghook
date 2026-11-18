@@ -24,10 +24,14 @@
 <p>Re-queue every sent, dead or retrying delivery in the window. Each one gets a new <code>X-Ghook-Delivery</code> id. Retry on a single row keeps the same id.</p>
 <form method="post" action="/admin/deliveries/window" class="form">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
-<div class="field"><label>Route name<input name="route" placeholder="optional"></label></div>
-<div class="field"><label>Target name<input name="target" placeholder="optional"></label></div>
-<div class="field"><label>Since<input name="since" placeholder="2026-01-01 or RFC3339"></label></div>
-<div class="field"><label>Until<input name="until" placeholder="optional"></label></div>
-<button class="btn" type="submit">Replay window</button>
+<div class="field"><label for="win-route">Route name</label>
+<input id="win-route" name="route" placeholder="optional"></div>
+<div class="field"><label for="win-target">Target name</label>
+<input id="win-target" name="target" placeholder="optional"></div>
+<div class="field"><label for="win-since">Since</label>
+<input id="win-since" name="since" placeholder="2026-01-01 or RFC3339"></div>
+<div class="field"><label for="win-until">Until</label>
+<input id="win-until" name="until" placeholder="optional"></div>
+<div class="row"><button class="btn" type="submit">Replay window</button></div>
 </form></div>
 {{end}}

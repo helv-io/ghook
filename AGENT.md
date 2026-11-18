@@ -4,7 +4,7 @@ Guidelines for changes to ghook. Applies to code, UI, docs and releases.
 
 ## Product principle
 
-Ghook is a self-hosted Gmail push router: Gmail `users.watch` in, webhook POST out. Users are not Google Cloud or OAuth experts. The lead is always that path. Claims stay modest: no "only" and no "first".
+ghook is a multi-tenant Gmail push router: Gmail `users.watch` in, webhook POST out. Anyone who signs in with Google gets their own isolated account. Users are not Google Cloud or OAuth experts. The lead is always that path. Claims stay modest: no "only" and no "first". There is no owner, invite, or allowlist story.
 
 - Prefer secure defaults that adapt automatically over config toggles.
 - Minimize settings. Every new option needs a reason a default cannot cover.
@@ -25,15 +25,15 @@ Ghook is a self-hosted Gmail push router: Gmail `users.watch` in, webhook POST o
 - Shared styles and components, never page by page. New markup goes in `internal/web/templates/components.html` and `internal/web/static/app.css`. No inline `style=` or `on*=`, and no page-specific CSS rules.
 - The top bar is sticky on every page and width (`position:sticky;top:0`, opaque, `--z-header`, below menus, dialogs and `--z-toast`). `--header-h` (kept by `app.js`) is the `scroll-padding-top`. Below 800 px it is one row: brand, current page name, a Menu button. The links, version, user and logout fold into `.nav-panel`. Wider windows keep the links in the bar. Standalone screens (login, privacy, terms) have no bar.
 - No horizontal overflow, down to 360 px, on any public or admin page. Short code chips and badges do not break mid-word. Long paths may wrap at `/` (class `path`, with `<wbr>` after each slash). Never set `white-space:nowrap` with `overflow-x:auto` on inline code. `pre` wraps. Tables and cards do not create a page or element horizontal scrollbar. After a CSS or template change, run the headless overflow audit at 1280, 768 and 375 (and 360 if the layout changed).
-- The product name in visible prose uses the reusable wordmark: `<span class="gh-word">ghook</span>` (keep the original capitalization, including `Ghook`). The class is `#ffd100` with a soft yellow `text-shadow`. Do not wrap the word inside code chips (`Ghook/CFO`, `X-Ghook-Delivery`), form values, placeholders, `<option>` text, or the document `<title>`. Dynamic errors and toasts go through the `wordmark` template func, which escapes first and matches the whole word only.
-- Chips that name a label path show the full text and wrap, never an ellipsis. Write `Ghook/Routed/<target>`, not `Ghook/Routed/…`.
+- The product name is always lowercase `ghook`, including the start of a sentence and in titles. The only `Ghook` spellings that stay are ones lowercase cannot express, such as a Go exported identifier or the wire header names `X-Ghook-Delivery` and `X-Ghook-Signature`. In visible prose the name uses the reusable wordmark: `<span class="gh-word">ghook</span>`. The class is `#ffd100` with a soft yellow `text-shadow`. Do not wrap the word inside code chips (`ghook/CFO`, `X-Ghook-Delivery`), form values, placeholders, `<option>` text, or the document `<title>`. Dynamic errors and toasts go through the `wordmark` template func, which escapes first, matches the whole word only, and always renders lowercase.
+- Chips that name a label path show the full text and wrap, never an ellipsis. Write `ghook/Routed/<target>`, not `ghook/Routed/…`.
 - List tables are tables above 800 px and a stack of cards below it, from the same markup. Every data cell on those tables carries `data-label`.
 - No page is rendered by a POST. Screens are GET and can be refreshed. A change is a POST that answers 303 to a screen.
 
 ## Security
 
 - Secrets are never logged, never put in URLs, never shown again in the UI after they are saved, and never committed. The UI shows that a secret is saved and lets you replace or clear it.
-- Do not print OAuth client JSON, service account keys, refresh tokens, `SECRETS_KEY`, session cookies, or Authelia and Traefik secrets.
+- Do not print OAuth client JSON, service account keys, refresh tokens, `SECRETS_KEY`, session cookies, or Traefik secrets.
 - Examples use only generic hostnames and addresses. No personal data in fixtures, docs, tests, screenshots or commit messages.
 
 ## Code
@@ -46,14 +46,13 @@ Repo layout:
 | `internal/web` | Admin UI, templates, static assets, public `/healthz` and `/hooks/pubsub` |
 | `internal/engine` | Watch, history, routing into the outbox |
 | `internal/deliver` | POST, retries, digest, quiet hours |
-| `internal/match` | Route filters and the `Ghook/<target>` label convention |
+| `internal/match` | Route filters and the `ghook/<target>` label convention |
 | `internal/pubsubx` | Pull and optional push |
 | `internal/gmailx` | Gmail API |
 | `internal/store` | SQLite and migrations |
 | `internal/config` | Boot environment |
 | `internal/secrets` | Sealed tokens |
 | `internal/bundle` | YAML export and import |
-| `internal/oidcauth` | Admin OIDC |
 | `docs/img` | Logo |
 
 Invariants. Do not weaken these:
@@ -73,8 +72,10 @@ Other conventions:
   ```
 
   CI runs the same three on every push and pull request.
-- Database changes are additive and backward compatible.
-- Boot settings come from the environment (see `.env.example`). Runtime configuration (Google, routes, targets, retention) lives in SQLite.
+- 0.1.3 needs a fresh database. Opening a workspace-era file is an error; back it up and replace it. Later changes should stay additive.
+- Boot settings come from the environment (see `.env.example`). The Google client and the shared Pub/Sub subscription are instance-wide. Routes, targets, and retention live in SQLite, scoped by `user_id`.
+- Every query and admin endpoint is scoped to the signed-in user. Tests must keep proving user A cannot see or modify user B's routes, targets, logs, or Gmail state.
+- Target secrets and Google tokens stay sealed at rest (`secrets.Box`, derived per user).
 - Update README and `.env.example` in the same change when you add or rename a boot variable.
 
 ## Release

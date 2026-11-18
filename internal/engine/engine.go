@@ -29,10 +29,11 @@ type Clients func(ctx context.Context, email string) (gmailx.Client, error)
 
 // Engine syncs mailboxes and queues deliveries.
 type Engine struct {
-	DB      *store.DB
-	Clients Clients
-	Feed    *feed.Feed
-	Now     func() time.Time
+	MaxDeliveries int
+	DB            *store.DB
+	Clients       Clients
+	Feed          *feed.Feed
+	Now           func() time.Time
 }
 
 func (e *Engine) now() time.Time {
@@ -120,7 +121,7 @@ func (e *Engine) Sync(ctx context.Context, email, notifyHistory string) error {
 		var first error
 		for _, a := range accs {
 			eng := *e
-			eng.DB = e.DB.Use(a.WorkspaceID)
+			eng.DB = e.DB.Use(a.UserID)
 			if err := eng.Sync(ctx, email, notifyHistory); err != nil && first == nil {
 				first = err
 			}
@@ -191,10 +192,7 @@ func (e *Engine) Sync(ctx context.Context, email, notifyHistory string) error {
 	for _, r := range routes {
 		rules = append(rules, r.AsMatch())
 	}
-	prefix := e.DB.Setting("label_prefix", "Ghook")
-	if strings.TrimSpace(prefix) == "" {
-		prefix = "Ghook"
-	}
+	prefix := match.Prefix(e.DB.Setting("label_prefix", match.DefaultPrefix))
 	convention := e.DB.BoolSetting("label_convention", true)
 	targets, err := e.DB.Targets()
 	if err != nil {
@@ -208,6 +206,7 @@ func (e *Engine) Sync(ctx context.Context, email, notifyHistory string) error {
 	for i := range msgs {
 		resolveLabels(&msgs[i], names)
 		plans := plansFor(msgs[i], rules, byName, prefix, convention)
+		plans = e.limitPlans(plans)
 		n, err := e.DB.QueueAndAdvance(acc.ID, acc.Email, msgs[i], plans, "")
 		if err != nil {
 			return err
@@ -238,15 +237,15 @@ func (e *Engine) Sync(ctx context.Context, email, notifyHistory string) error {
 
 func (e *Engine) advance(accountID int64, history string) error {
 	var cur string
-	if err := e.DB.SQL.QueryRow(`SELECT history_id FROM accounts WHERE id=? AND workspace_id=?`, accountID, e.DB.WorkspaceID()).Scan(&cur); err != nil {
+	if err := e.DB.SQL.QueryRow(`SELECT history_id FROM accounts WHERE id=? AND user_id=?`, accountID, e.DB.UserID()).Scan(&cur); err != nil {
 		return err
 	}
 	ts := e.now().Unix()
 	if !historyLess(cur, history) && cur != "" {
-		_, err := e.DB.SQL.Exec(`UPDATE accounts SET last_sync=? WHERE id=? AND workspace_id=?`, ts, accountID, e.DB.WorkspaceID())
+		_, err := e.DB.SQL.Exec(`UPDATE accounts SET last_sync=? WHERE id=? AND user_id=?`, ts, accountID, e.DB.UserID())
 		return err
 	}
-	_, err := e.DB.SQL.Exec(`UPDATE accounts SET history_id=?, last_sync=?, updated_at=? WHERE id=? AND workspace_id=?`, history, ts, ts, accountID, e.DB.WorkspaceID())
+	_, err := e.DB.SQL.Exec(`UPDATE accounts SET history_id=?, last_sync=?, updated_at=? WHERE id=? AND user_id=?`, history, ts, ts, accountID, e.DB.UserID())
 	return err
 }
 
@@ -454,10 +453,7 @@ func (e *Engine) Preview(ctx context.Context, rules []match.Route, n int) ([]Pre
 	if err != nil {
 		return nil, err
 	}
-	prefix := e.DB.Setting("label_prefix", "Ghook")
-	if strings.TrimSpace(prefix) == "" {
-		prefix = "Ghook"
-	}
+	prefix := match.Prefix(e.DB.Setting("label_prefix", match.DefaultPrefix))
 	convention := e.DB.BoolSetting("label_convention", true)
 	targets, err := e.DB.Targets()
 	if err != nil {
@@ -539,4 +535,19 @@ func atoi(s string) (uint64, bool) {
 		n = n*10 + uint64(c-'0')
 	}
 	return n, true
+}
+
+func (e *Engine) limitPlans(plans []store.MatchPlan) []store.MatchPlan {
+	if e == nil || e.MaxDeliveries <= 0 || len(plans) == 0 {
+		return plans
+	}
+	day := time.Now().UTC().Truncate(24 * time.Hour).Unix()
+	left := e.MaxDeliveries - e.DB.DeliveriesSince(day)
+	if left <= 0 {
+		return nil
+	}
+	if left >= len(plans) {
+		return plans
+	}
+	return plans[:left]
 }

@@ -1,0 +1,13 @@
+{{define "body"}}
+<div class="login"><div class="card">{{template "brandmark"}}
+<h2>Sign in</h2>
+<p><span class="gh-word">ghook</span> routes your Gmail to the webhooks you choose. Sign in with Google to create your account and connect that mailbox.</p>
+{{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
+{{if .Ready}}
+<div class="choices"><a class="btn fill" href="/auth/google">Sign in with Google</a></div>
+{{else}}
+<div class="callout bad">This instance is not ready for sign-in. The operator needs to set the Google OAuth client.</div>
+{{end}}
+<p class="muted"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
+</div></div>
+{{end}}

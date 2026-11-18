@@ -19,15 +19,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// DB is one open database. wid is the workspace every tenant query is scoped to.
-// all is set only for the background worker, which drains every workspace and
+// DB is one open database. uid is the user every tenant query is scoped to.
+// all is set only for the background worker, which drains every user and
 // then opens each row with Use.
 type DB struct {
 	SQL    *sql.DB
 	Box    *secrets.Box
 	root   *secrets.Box
 	Source string
-	wid    int64
+	uid    int64
 	all    bool
 }
 
@@ -47,19 +47,14 @@ func Open(path, secretsKey, keyFile string) (*DB, error) {
 		_ = s.Close()
 		return nil, err
 	}
-	id, err := d.DefaultWorkspaceID()
-	if err != nil {
-		_ = s.Close()
-		return nil, err
-	}
-	return d.Use(id), nil
+	return d, nil
 }
 
-// Use returns a handle scoped to one workspace. Secrets are sealed with the
-// key derived for that workspace.
+// Use returns a handle scoped to one user. Secrets are sealed with the
+// key derived for that user.
 func (d *DB) Use(id int64) *DB {
 	cp := *d
-	cp.wid = id
+	cp.uid = id
 	cp.all = false
 	if d.root != nil && id != 0 {
 		cp.Box = d.root.Derive(id)
@@ -67,41 +62,41 @@ func (d *DB) Use(id int64) *DB {
 	return &cp
 }
 
-// Unscoped is the background worker's view: lists span workspaces. Do not use
+// Unscoped is the background worker's view: lists span users. Do not use
 // it from a request.
 func (d *DB) Unscoped() *DB {
 	cp := *d
 	cp.all = true
-	cp.wid = 0
+	cp.uid = 0
 	if d.root != nil {
 		cp.Box = d.root
 	}
 	return &cp
 }
 
-// WorkspaceID is the scope of this handle.
-func (d *DB) WorkspaceID() int64 { return d.wid }
+// UserID is the scope of this handle.
+func (d *DB) UserID() int64 { return d.uid }
 
 func (d *DB) filter(where string) (string, []any) {
 	if d.all {
 		return where, nil
 	}
 	if where == "" {
-		return " WHERE workspace_id=?", []any{d.wid}
+		return " WHERE user_id=?", []any{d.uid}
 	}
-	return where + " AND workspace_id=?", []any{d.wid}
+	return where + " AND user_id=?", []any{d.uid}
 }
 
-// withWS adds the workspace predicate before tail. args are the tail's placeholders.
-func (d *DB) withWS(from, tail string, args []any) (string, []any) {
+// withUser adds the user predicate before tail. args are the tail's placeholders.
+func (d *DB) withUser(from, tail string, args []any) (string, []any) {
 	if d.all {
 		if tail == "" {
 			return from, args
 		}
 		return from + " " + tail, args
 	}
-	q := from + " WHERE workspace_id=?"
-	out := append([]any{d.wid}, args...)
+	q := from + " WHERE user_id=?"
+	out := append([]any{d.uid}, args...)
 	if tail != "" {
 		q += " " + tail
 	}
@@ -116,7 +111,7 @@ func now() int64 { return time.Now().Unix() }
 // Setting reads a setting or returns def.
 func (d *DB) Setting(key, def string) string {
 	var v string
-	err := d.SQL.QueryRow(`SELECT value FROM settings WHERE workspace_id=? AND key=?`, d.wid, key).Scan(&v)
+	err := d.SQL.QueryRow(`SELECT value FROM settings WHERE user_id=? AND key=?`, d.uid, key).Scan(&v)
 	if err != nil {
 		return def
 	}
@@ -125,8 +120,8 @@ func (d *DB) Setting(key, def string) string {
 
 // SetSetting writes a setting.
 func (d *DB) SetSetting(key, value string) error {
-	_, err := d.SQL.Exec(`INSERT INTO settings(workspace_id, key, value) VALUES(?, ?, ?)
-		ON CONFLICT(workspace_id, key) DO UPDATE SET value=excluded.value`, d.wid, key, value)
+	_, err := d.SQL.Exec(`INSERT INTO settings(user_id, key, value) VALUES(?, ?, ?)
+		ON CONFLICT(user_id, key) DO UPDATE SET value=excluded.value`, d.uid, key, value)
 	return err
 }
 
@@ -161,7 +156,7 @@ func (d *DB) BoolSetting(key string, def bool) bool {
 // SetSecret stores a sealed value. An empty plain clears it.
 func (d *DB) SetSecret(key, plain string) error {
 	if plain == "" {
-		_, err := d.SQL.Exec(`DELETE FROM settings WHERE workspace_id=? AND key=?`, d.wid, key)
+		_, err := d.SQL.Exec(`DELETE FROM settings WHERE user_id=? AND key=?`, d.uid, key)
 		return err
 	}
 	return d.SetSetting(key, d.Box.Seal(plain))
@@ -170,7 +165,7 @@ func (d *DB) SetSecret(key, plain string) error {
 // OpenSecret opens a sealed setting. Missing is ("", false, nil).
 func (d *DB) OpenSecret(key string) (string, bool, error) {
 	var raw string
-	err := d.SQL.QueryRow(`SELECT value FROM settings WHERE workspace_id=? AND key=?`, d.wid, key).Scan(&raw)
+	err := d.SQL.QueryRow(`SELECT value FROM settings WHERE user_id=? AND key=?`, d.uid, key).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
@@ -186,8 +181,8 @@ func (d *DB) OpenSecret(key string) (string, bool, error) {
 
 // Audit appends a configuration-change record. Detail must not contain a secret.
 func (d *DB) Audit(actor, action, detail string) error {
-	_, err := d.SQL.Exec(`INSERT INTO audit(workspace_id, at, actor, action, detail) VALUES(?, ?, ?, ?, ?)`,
-		d.wid, now(), actor, action, detail)
+	_, err := d.SQL.Exec(`INSERT INTO audit(user_id, at, actor, action, detail) VALUES(?, ?, ?, ?, ?)`,
+		d.uid, now(), actor, action, detail)
 	return err
 }
 
@@ -205,7 +200,7 @@ func (d *DB) Audits(limit int) ([]AuditRow, error) {
 	if limit <= 0 {
 		limit = 200
 	}
-	q, args := d.withWS(`SELECT id, at, actor, action, detail FROM audit`, "ORDER BY id DESC LIMIT ?", []any{limit})
+	q, args := d.withUser(`SELECT id, at, actor, action, detail FROM audit`, "ORDER BY id DESC LIMIT ?", []any{limit})
 	rows, err := d.SQL.Query(q, args...)
 	if err != nil {
 		return nil, err
@@ -222,119 +217,15 @@ func (d *DB) Audits(limit int) ([]AuditRow, error) {
 	return out, rows.Err()
 }
 
-// GoogleClientJSON returns the workspace override, or the instance client.
-func (d *DB) GoogleClientJSON() (string, bool, error) {
-	if d.wid != 0 {
-		s, ok, err := d.OpenSecret("google_client_json")
-		if err != nil || (ok && s != "") {
-			return s, ok && s != "", err
-		}
-	}
-	return d.Instance().OpenSecret("google_client_json")
-}
-
-// SetGoogleClientJSON stores the client for this workspace. Use Instance to store the shared one.
-func (d *DB) SetGoogleClientJSON(raw string) error { return d.SetSecret("google_client_json", raw) }
-
-// Instance is workspace 0: the session secret and the shared Google client.
+// Instance is user_id 0: the session secret and other process-wide sealed values.
 func (d *DB) Instance() *DB {
 	cp := *d
-	cp.wid = 0
+	cp.uid = 0
 	cp.all = false
 	if d.root != nil {
 		cp.Box = d.root
 	}
 	return &cp
-}
-
-// PubSub is one topic and subscription. The service account JSON is not on this struct.
-type PubSub struct {
-	ID           int64
-	WorkspaceID  int64
-	Name         string
-	Project      string
-	Topic        string
-	Subscription string
-	Mode         string
-	PushAudience string
-	PushEmail    string
-	UseOAuth     bool
-	HasSA        bool
-}
-
-// LoadPubSub reads the first connection in this workspace.
-func (d *DB) LoadPubSub() PubSub {
-	all, err := d.PubSubs()
-	if err == nil && len(all) > 0 {
-		return all[0]
-	}
-	p := PubSub{
-		Name:         "main",
-		Project:      d.Setting("ps_project", ""),
-		Topic:        d.Setting("ps_topic", ""),
-		Subscription: d.Setting("ps_subscription", ""),
-		Mode:         d.Setting("ps_mode", "pull"),
-		PushAudience: d.Setting("ps_push_audience", ""),
-		PushEmail:    d.Setting("ps_push_email", ""),
-		UseOAuth:     d.BoolSetting("ps_use_oauth", false),
-	}
-	if p.Mode != "push" {
-		p.Mode = "pull"
-	}
-	if _, ok, _ := d.OpenSecret("ps_sa_json"); ok {
-		p.HasSA = true
-	}
-	return p
-}
-
-// SavePubSub writes one named connection. An empty name is "main".
-func (d *DB) SavePubSub(p PubSub, saJSON string, clearSA bool) error {
-	if p.Mode != "push" {
-		p.Mode = "pull"
-	}
-	if strings.TrimSpace(p.Name) == "" {
-		p.Name = "main"
-	}
-	var existing string
-	_ = d.SQL.QueryRow(`SELECT sa_json FROM pubsubs WHERE workspace_id=? AND name=?`, d.wid, p.Name).Scan(&existing)
-	stored := existing
-	switch {
-	case clearSA:
-		stored = ""
-	case strings.TrimSpace(saJSON) != "":
-		stored = d.Box.Seal(saJSON)
-	}
-	oauth := 0
-	if p.UseOAuth {
-		oauth = 1
-	}
-	ts := now()
-	_, err := d.SQL.Exec(`INSERT INTO pubsubs(workspace_id, name, project, topic, subscription, mode, push_audience, push_email, use_oauth, sa_json, created_at, updated_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(workspace_id, name) DO UPDATE SET
-		project=excluded.project, topic=excluded.topic, subscription=excluded.subscription, mode=excluded.mode,
-		push_audience=excluded.push_audience, push_email=excluded.push_email, use_oauth=excluded.use_oauth,
-		sa_json=excluded.sa_json, updated_at=excluded.updated_at`,
-		d.wid, strings.TrimSpace(p.Name), strings.TrimSpace(p.Project), strings.TrimSpace(p.Topic), strings.TrimSpace(p.Subscription),
-		p.Mode, strings.TrimSpace(p.PushAudience), strings.TrimSpace(p.PushEmail), oauth, stored, ts, ts)
-	return err
-}
-
-// ServiceAccountJSON opens the service account for this workspace's first connection.
-func (d *DB) ServiceAccountJSON() (string, error) {
-	var raw string
-	err := d.SQL.QueryRow(`SELECT sa_json FROM pubsubs WHERE workspace_id=? AND sa_json!='' ORDER BY id LIMIT 1`, d.wid).Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) || raw == "" {
-		s, ok, oerr := d.OpenSecret("ps_sa_json")
-		if !ok {
-			return "", oerr
-		}
-		return s, oerr
-	}
-	if err != nil {
-		return "", err
-	}
-	return d.Box.Open(raw)
 }
 
 func boolStr(b bool) string {
@@ -357,8 +248,7 @@ type Account struct {
 	LastSync          int64
 	Disabled          bool
 	HasToken          bool
-	WorkspaceID       int64
-	PubSubID          int64
+	UserID            int64
 	refresh           string
 	access            string
 	accessExp         int64
@@ -375,7 +265,7 @@ func scanAccount(sc interface{ Scan(...any) error }) (Account, error) {
 	var dis int
 	var refresh, access string
 	err := sc.Scan(&a.ID, &a.Email, &refresh, &access, &a.accessExp, &a.Scopes, &a.HistoryID,
-		&a.WatchExpiry, &a.WatchError, &a.LastNotify, &a.LastNotifyHistory, &a.LastSync, &dis, &a.WorkspaceID, &a.PubSubID)
+		&a.WatchExpiry, &a.WatchError, &a.LastNotify, &a.LastNotifyHistory, &a.LastSync, &dis, &a.UserID)
 	if err != nil {
 		return a, err
 	}
@@ -387,11 +277,11 @@ func scanAccount(sc interface{ Scan(...any) error }) (Account, error) {
 }
 
 const accountCols = `id, email, refresh_token, access_token, access_expiry, scopes, history_id,
-	watch_expiry, watch_error, last_notify, last_notify_history, last_sync, disabled, workspace_id, pubsub_id`
+	watch_expiry, watch_error, last_notify, last_notify_history, last_sync, disabled, user_id`
 
 // Accounts lists every mailbox.
 func (d *DB) Accounts() ([]Account, error) {
-	q, args := d.withWS(`SELECT `+accountCols+` FROM accounts`, "ORDER BY email", nil)
+	q, args := d.withUser(`SELECT `+accountCols+` FROM accounts`, "ORDER BY email", nil)
 	rows, err := d.SQL.Query(q, args...)
 	if err != nil {
 		return nil, err
@@ -410,7 +300,7 @@ func (d *DB) Accounts() ([]Account, error) {
 
 // AccountByEmail finds a mailbox.
 func (d *DB) AccountByEmail(email string) (Account, bool, error) {
-	row := d.SQL.QueryRow(`SELECT `+accountCols+` FROM accounts WHERE lower(email)=lower(?) AND workspace_id=?`, strings.TrimSpace(email), d.wid)
+	row := d.SQL.QueryRow(`SELECT `+accountCols+` FROM accounts WHERE lower(email)=lower(?) AND user_id=?`, strings.TrimSpace(email), d.uid)
 	a, err := scanAccount(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Account{}, false, nil
@@ -426,8 +316,8 @@ func (d *DB) AccountByID(id int64) (Account, bool, error) {
 	q := `SELECT ` + accountCols + ` FROM accounts WHERE id=?`
 	args := []any{id}
 	if !d.all {
-		q += ` AND workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	row := d.SQL.QueryRow(q, args...)
 	a, err := scanAccount(row)
@@ -472,16 +362,16 @@ func (d *DB) SaveAccount(email, refresh, access string, accessExp int64, scopes,
 		historyID = cur.HistoryID
 	}
 	if !ok {
-		_, err = d.SQL.Exec(`INSERT INTO accounts(workspace_id, email, refresh_token, access_token, access_expiry, scopes, history_id, created_at, updated_at)
+		_, err = d.SQL.Exec(`INSERT INTO accounts(user_id, email, refresh_token, access_token, access_expiry, scopes, history_id, created_at, updated_at)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			d.wid, email, d.Box.Seal(refresh), d.Box.Seal(access), accessExp, scopes, historyID, t, t)
+			d.uid, email, d.Box.Seal(refresh), d.Box.Seal(access), accessExp, scopes, historyID, t, t)
 	} else {
 		if refresh == "" {
 			refresh = cur.refresh
 		}
 		_, err = d.SQL.Exec(`UPDATE accounts SET refresh_token=?, access_token=?, access_expiry=?, scopes=?,
-			history_id=CASE WHEN ?!='' THEN ? ELSE history_id END, updated_at=? WHERE id=? AND workspace_id=?`,
-			d.Box.Seal(refresh), d.Box.Seal(access), accessExp, scopes, historyID, historyID, t, cur.ID, d.wid)
+			history_id=CASE WHEN ?!='' THEN ? ELSE history_id END, updated_at=? WHERE id=? AND user_id=?`,
+			d.Box.Seal(refresh), d.Box.Seal(access), accessExp, scopes, historyID, historyID, t, cur.ID, d.uid)
 	}
 	if err != nil {
 		return Account{}, err
@@ -492,16 +382,16 @@ func (d *DB) SaveAccount(email, refresh, access string, accessExp int64, scopes,
 
 // UpdateTokens caches a refreshed access token.
 func (d *DB) UpdateTokens(id int64, refresh, access string, exp int64) error {
-	_, err := d.SQL.Exec(`UPDATE accounts SET refresh_token=?, access_token=?, access_expiry=?, updated_at=? WHERE id=? AND workspace_id=?`,
-		d.Box.Seal(refresh), d.Box.Seal(access), exp, now(), id, d.wid)
+	_, err := d.SQL.Exec(`UPDATE accounts SET refresh_token=?, access_token=?, access_expiry=?, updated_at=? WHERE id=? AND user_id=?`,
+		d.Box.Seal(refresh), d.Box.Seal(access), exp, now(), id, d.uid)
 	return err
 }
 
 // SetWatch records a watch result.
 func (d *DB) SetWatch(id int64, expiry int64, historyID, errText string) error {
 	_, err := d.SQL.Exec(`UPDATE accounts SET watch_expiry=?, watch_error=?,
-		history_id=CASE WHEN history_id='' AND ?!='' THEN ? ELSE history_id END, updated_at=? WHERE id=? AND workspace_id=?`,
-		expiry, errText, historyID, historyID, now(), id, d.wid)
+		history_id=CASE WHEN history_id='' AND ?!='' THEN ? ELSE history_id END, updated_at=? WHERE id=? AND user_id=?`,
+		expiry, errText, historyID, historyID, now(), id, d.uid)
 	return err
 }
 
@@ -511,20 +401,20 @@ func (d *DB) SetAccountDisabled(id int64, disabled bool) error {
 	if disabled {
 		v = 1
 	}
-	_, err := d.SQL.Exec(`UPDATE accounts SET disabled=?, updated_at=? WHERE id=? AND workspace_id=?`, v, now(), id, d.wid)
+	_, err := d.SQL.Exec(`UPDATE accounts SET disabled=?, updated_at=? WHERE id=? AND user_id=?`, v, now(), id, d.uid)
 	return err
 }
 
 // DeleteAccount removes a mailbox. Deliveries are kept.
 func (d *DB) DeleteAccount(id int64) error {
-	_, err := d.SQL.Exec(`DELETE FROM accounts WHERE id=? AND workspace_id=?`, id, d.wid)
+	_, err := d.SQL.Exec(`DELETE FROM accounts WHERE id=? AND user_id=?`, id, d.uid)
 	return err
 }
 
 // TouchNotify records that a notification arrived.
 func (d *DB) TouchNotify(id int64, history string) error {
-	_, err := d.SQL.Exec(`UPDATE accounts SET last_notify=?, last_notify_history=?, updated_at=? WHERE id=? AND workspace_id=?`,
-		now(), history, now(), id, d.wid)
+	_, err := d.SQL.Exec(`UPDATE accounts SET last_notify=?, last_notify_history=?, updated_at=? WHERE id=? AND user_id=?`,
+		now(), history, now(), id, d.uid)
 	return err
 }
 
@@ -544,7 +434,7 @@ type Target struct {
 	RatePerMin  int
 	LastDigest  int64
 	HasSecret   bool
-	WorkspaceID int64
+	UserID      int64
 	secret      string
 }
 
@@ -556,7 +446,7 @@ func scanTarget(sc interface{ Scan(...any) error }, box *secrets.Box, open bool)
 	var body, paused int
 	var secret string
 	err := sc.Scan(&t.ID, &t.Name, &t.URL, &secret, &t.AuthMode, &t.AuthHeader, &t.Template,
-		&body, &paused, &t.QuietStart, &t.QuietEnd, &t.DigestAt, &t.RatePerMin, &t.LastDigest, &t.WorkspaceID)
+		&body, &paused, &t.QuietStart, &t.QuietEnd, &t.DigestAt, &t.RatePerMin, &t.LastDigest, &t.UserID)
 	if err != nil {
 		return t, err
 	}
@@ -577,11 +467,11 @@ func scanTarget(sc interface{ Scan(...any) error }, box *secrets.Box, open bool)
 }
 
 const targetCols = `id, name, url, secret, auth_mode, auth_header, payload_template, include_body, paused,
-	quiet_start, quiet_end, digest_at, rate_per_minute, last_digest, workspace_id`
+	quiet_start, quiet_end, digest_at, rate_per_minute, last_digest, user_id`
 
 // Targets lists endpoints. Secrets stay sealed.
 func (d *DB) Targets() ([]Target, error) {
-	q, args := d.withWS(`SELECT `+targetCols+` FROM targets`, "ORDER BY name", nil)
+	q, args := d.withUser(`SELECT `+targetCols+` FROM targets`, "ORDER BY name", nil)
 	rows, err := d.SQL.Query(q, args...)
 	if err != nil {
 		return nil, err
@@ -603,8 +493,8 @@ func (d *DB) TargetByID(id int64, openSecret bool) (Target, bool, error) {
 	q := `SELECT ` + targetCols + ` FROM targets WHERE id=?`
 	args := []any{id}
 	if !d.all {
-		q += ` AND workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	row := d.SQL.QueryRow(q, args...)
 	t, err := scanTarget(row, d.Box, openSecret)
@@ -619,7 +509,7 @@ func (d *DB) TargetByID(id int64, openSecret bool) (Target, bool, error) {
 
 // TargetByName loads one endpoint by its unique name.
 func (d *DB) TargetByName(name string, openSecret bool) (Target, bool, error) {
-	row := d.SQL.QueryRow(`SELECT `+targetCols+` FROM targets WHERE lower(name)=lower(?) AND workspace_id=?`, strings.TrimSpace(name), d.wid)
+	row := d.SQL.QueryRow(`SELECT `+targetCols+` FROM targets WHERE lower(name)=lower(?) AND user_id=?`, strings.TrimSpace(name), d.uid)
 	t, err := scanTarget(row, d.Box, openSecret)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Target{}, false, nil
@@ -675,10 +565,10 @@ func (d *DB) SaveTarget(t Target, secret string, clearSecret bool) (Target, erro
 			// that has already passed today.
 			lastDigest = ts
 		}
-		res, err := d.SQL.Exec(`INSERT INTO targets(workspace_id, name, url, secret, auth_mode, auth_header, payload_template,
+		res, err := d.SQL.Exec(`INSERT INTO targets(user_id, name, url, secret, auth_mode, auth_header, payload_template,
 			include_body, paused, quiet_start, quiet_end, digest_at, rate_per_minute, last_digest, created_at, updated_at)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			d.wid, t.Name, t.URL, stored, t.AuthMode, strings.TrimSpace(t.AuthHeader), t.Template,
+			d.uid, t.Name, t.URL, stored, t.AuthMode, strings.TrimSpace(t.AuthHeader), t.Template,
 			body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, lastDigest, ts, ts)
 		if err != nil {
 			return Target{}, err
@@ -696,9 +586,9 @@ func (d *DB) SaveTarget(t Target, secret string, clearSecret bool) (Target, erro
 		lastDigest = ts
 	}
 	_, err = d.SQL.Exec(`UPDATE targets SET name=?, url=?, secret=?, auth_mode=?, auth_header=?, payload_template=?,
-		include_body=?, paused=?, quiet_start=?, quiet_end=?, digest_at=?, rate_per_minute=?, last_digest=?, updated_at=? WHERE id=? AND workspace_id=?`,
+		include_body=?, paused=?, quiet_start=?, quiet_end=?, digest_at=?, rate_per_minute=?, last_digest=?, updated_at=? WHERE id=? AND user_id=?`,
 		t.Name, t.URL, stored, t.AuthMode, strings.TrimSpace(t.AuthHeader), t.Template,
-		body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, lastDigest, ts, id, d.wid)
+		body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, lastDigest, ts, id, d.uid)
 	if err != nil {
 		return Target{}, err
 	}
@@ -712,26 +602,26 @@ func (d *DB) SetTargetPaused(id int64, paused bool) error {
 	if paused {
 		v = 1
 	}
-	_, err := d.SQL.Exec(`UPDATE targets SET paused=?, updated_at=? WHERE id=? AND workspace_id=?`, v, now(), id, d.wid)
+	_, err := d.SQL.Exec(`UPDATE targets SET paused=?, updated_at=? WHERE id=? AND user_id=?`, v, now(), id, d.uid)
 	return err
 }
 
 // SetLastDigest records the last digest send.
 func (d *DB) SetLastDigest(id, unix int64) error {
-	_, err := d.SQL.Exec(`UPDATE targets SET last_digest=? WHERE id=? AND workspace_id=?`, unix, id, d.wid)
+	_, err := d.SQL.Exec(`UPDATE targets SET last_digest=? WHERE id=? AND user_id=?`, unix, id, d.uid)
 	return err
 }
 
 // DeleteTarget removes a target that no route still uses.
 func (d *DB) DeleteTarget(id int64) error {
 	var n int
-	if err := d.SQL.QueryRow(`SELECT count(*) FROM routes WHERE target_id=? AND workspace_id=?`, id, d.wid).Scan(&n); err != nil {
+	if err := d.SQL.QueryRow(`SELECT count(*) FROM routes WHERE target_id=? AND user_id=?`, id, d.uid).Scan(&n); err != nil {
 		return err
 	}
 	if n > 0 {
 		return fmt.Errorf("this target is used by %d route(s)", n)
 	}
-	_, err := d.SQL.Exec(`DELETE FROM targets WHERE id=? AND workspace_id=?`, id, d.wid)
+	_, err := d.SQL.Exec(`DELETE FROM targets WHERE id=? AND user_id=?`, id, d.uid)
 	return err
 }
 
@@ -765,8 +655,8 @@ func (d *DB) Routes() ([]Route, error) {
 		FROM routes r LEFT JOIN targets t ON t.id=r.target_id`
 	args := []any{}
 	if !d.all {
-		q += ` WHERE r.workspace_id=?`
-		args = append(args, d.wid)
+		q += ` WHERE r.user_id=?`
+		args = append(args, d.uid)
 	}
 	q += ` ORDER BY r.position, r.id`
 	rows, err := d.SQL.Query(q, args...)
@@ -804,8 +694,8 @@ func (d *DB) RouteByID(id int64) (Route, bool, error) {
 		FROM routes r LEFT JOIN targets t ON t.id=r.target_id WHERE r.id=?`
 	args := []any{id}
 	if !d.all {
-		q += ` AND r.workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND r.user_id=?`
+		args = append(args, d.uid)
 	}
 	row := d.SQL.QueryRow(q, args...)
 	r, err := scanRoute(row)
@@ -837,13 +727,13 @@ func (d *DB) SaveRoute(r Route) (Route, error) {
 	}
 	if r.ID == 0 {
 		var pos int
-		_ = d.SQL.QueryRow(`SELECT COALESCE(MAX(position), 0) FROM routes WHERE workspace_id=?`, d.wid).Scan(&pos)
+		_ = d.SQL.QueryRow(`SELECT COALESCE(MAX(position), 0) FROM routes WHERE user_id=?`, d.uid).Scan(&pos)
 		if r.Position == 0 {
 			r.Position = pos + 1
 		}
-		res, err := d.SQL.Exec(`INSERT INTO routes(workspace_id, name, position, enabled, fallback, cont, target_id, match_json, apply_label, created_at, updated_at)
+		res, err := d.SQL.Exec(`INSERT INTO routes(user_id, name, position, enabled, fallback, cont, target_id, match_json, apply_label, created_at, updated_at)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			d.wid, strings.TrimSpace(r.Name), r.Position, b(r.Enabled), b(r.Fallback), b(r.Continue), r.TargetID, string(raw), b(r.ApplyLabel), ts, ts)
+			d.uid, strings.TrimSpace(r.Name), r.Position, b(r.Enabled), b(r.Fallback), b(r.Continue), r.TargetID, string(raw), b(r.ApplyLabel), ts, ts)
 		if err != nil {
 			return Route{}, err
 		}
@@ -851,8 +741,8 @@ func (d *DB) SaveRoute(r Route) (Route, error) {
 		out, _, err := d.RouteByID(id)
 		return out, err
 	}
-	_, err = d.SQL.Exec(`UPDATE routes SET name=?, enabled=?, fallback=?, cont=?, target_id=?, match_json=?, apply_label=?, updated_at=? WHERE id=? AND workspace_id=?`,
-		strings.TrimSpace(r.Name), b(r.Enabled), b(r.Fallback), b(r.Continue), r.TargetID, string(raw), b(r.ApplyLabel), ts, r.ID, d.wid)
+	_, err = d.SQL.Exec(`UPDATE routes SET name=?, enabled=?, fallback=?, cont=?, target_id=?, match_json=?, apply_label=?, updated_at=? WHERE id=? AND user_id=?`,
+		strings.TrimSpace(r.Name), b(r.Enabled), b(r.Fallback), b(r.Continue), r.TargetID, string(raw), b(r.ApplyLabel), ts, r.ID, d.uid)
 	if err != nil {
 		return Route{}, err
 	}
@@ -862,7 +752,7 @@ func (d *DB) SaveRoute(r Route) (Route, error) {
 
 // DeleteRoute removes a rule.
 func (d *DB) DeleteRoute(id int64) error {
-	_, err := d.SQL.Exec(`DELETE FROM routes WHERE id=? AND workspace_id=?`, id, d.wid)
+	_, err := d.SQL.Exec(`DELETE FROM routes WHERE id=? AND user_id=?`, id, d.uid)
 	return err
 }
 
@@ -874,7 +764,7 @@ func (d *DB) ReorderRoutes(ids []int64) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	for i, id := range ids {
-		if _, err := tx.Exec(`UPDATE routes SET position=? WHERE id=? AND workspace_id=?`, i+1, id, d.wid); err != nil {
+		if _, err := tx.Exec(`UPDATE routes SET position=? WHERE id=? AND user_id=?`, i+1, id, d.uid); err != nil {
 			return err
 		}
 	}
@@ -920,8 +810,8 @@ func (d *DB) RecentMessages(n int) ([]StoredMessage, error) {
 		FROM messages m LEFT JOIN accounts a ON a.id=m.account_id`
 	args := []any{}
 	if !d.all {
-		q += ` WHERE m.workspace_id=?`
-		args = append(args, d.wid)
+		q += ` WHERE m.user_id=?`
+		args = append(args, d.uid)
 	}
 	q += ` ORDER BY m.date_ms DESC, m.id DESC LIMIT ?`
 	args = append(args, n)
@@ -979,14 +869,14 @@ func (d *DB) QueueAndAdvance(accountID int64, accountEmail string, msg mail.Mess
 	if msg.HasAttachment {
 		att = 1
 	}
-	_, err = tx.Exec(`INSERT INTO messages(workspace_id, account_id, gmail_id, thread_id, history_id, from_addr, to_addr, cc_addr,
+	_, err = tx.Exec(`INSERT INTO messages(user_id, account_id, gmail_id, thread_id, history_id, from_addr, to_addr, cc_addr,
 		subject, snippet, date_ms, labels, category, has_attachment, created_at)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(workspace_id, account_id, gmail_id) DO UPDATE SET
+		ON CONFLICT(user_id, account_id, gmail_id) DO UPDATE SET
 		thread_id=excluded.thread_id, history_id=excluded.history_id, from_addr=excluded.from_addr,
 		to_addr=excluded.to_addr, cc_addr=excluded.cc_addr, subject=excluded.subject, snippet=excluded.snippet,
 		date_ms=excluded.date_ms, labels=excluded.labels, category=excluded.category, has_attachment=excluded.has_attachment`,
-		d.wid, accountID, msg.ID, msg.ThreadID, msg.HistoryID, msg.From, msg.To, msg.Cc, msg.Subject, msg.Snippet,
+		d.uid, accountID, msg.ID, msg.ThreadID, msg.HistoryID, msg.From, msg.To, msg.Cc, msg.Subject, msg.Snippet,
 		dateMS, string(labels), msg.Category, att, ts)
 	if err != nil {
 		return 0, err
@@ -994,11 +884,11 @@ func (d *DB) QueueAndAdvance(accountID int64, accountEmail string, msg mail.Mess
 	inserted := 0
 	for _, p := range plans {
 		key := newID()
-		res, err := tx.Exec(`INSERT INTO deliveries(workspace_id, delivery_key, account_id, account_email, gmail_id, thread_id,
+		res, err := tx.Exec(`INSERT INTO deliveries(user_id, delivery_key, account_id, account_email, gmail_id, thread_id,
 			route_key, route_name, target_id, target_name, kind, status, attempts, next_attempt, payload_json, created_at, updated_at)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'mail', 'queued', 0, ?, '', ?, ?)
-			ON CONFLICT(workspace_id, account_id, gmail_id, route_key) DO NOTHING`,
-			d.wid, key, accountID, accountEmail, msg.ID, msg.ThreadID, p.RouteKey, p.RouteName, p.TargetID, p.TargetName, ts, ts, ts)
+			ON CONFLICT(user_id, account_id, gmail_id, route_key) DO NOTHING`,
+			d.uid, key, accountID, accountEmail, msg.ID, msg.ThreadID, p.RouteKey, p.RouteName, p.TargetID, p.TargetName, ts, ts, ts)
 		if err != nil {
 			return 0, err
 		}
@@ -1007,13 +897,13 @@ func (d *DB) QueueAndAdvance(accountID int64, accountEmail string, msg mail.Mess
 	}
 	if newHistory != "" {
 		var cur string
-		_ = tx.QueryRow(`SELECT history_id FROM accounts WHERE id=? AND workspace_id=?`, accountID, d.wid).Scan(&cur)
+		_ = tx.QueryRow(`SELECT history_id FROM accounts WHERE id=? AND user_id=?`, accountID, d.uid).Scan(&cur)
 		if historyNewer(newHistory, cur) {
-			if _, err := tx.Exec(`UPDATE accounts SET history_id=?, last_sync=?, updated_at=? WHERE id=? AND workspace_id=?`,
-				newHistory, ts, ts, accountID, d.wid); err != nil {
+			if _, err := tx.Exec(`UPDATE accounts SET history_id=?, last_sync=?, updated_at=? WHERE id=? AND user_id=?`,
+				newHistory, ts, ts, accountID, d.uid); err != nil {
 				return 0, err
 			}
-		} else if _, err := tx.Exec(`UPDATE accounts SET last_sync=?, updated_at=? WHERE id=? AND workspace_id=?`, ts, ts, accountID, d.wid); err != nil {
+		} else if _, err := tx.Exec(`UPDATE accounts SET last_sync=?, updated_at=? WHERE id=? AND user_id=?`, ts, ts, accountID, d.uid); err != nil {
 			return 0, err
 		}
 	}
@@ -1054,7 +944,7 @@ func (d *DB) idClause(id int64) (string, []any) {
 	if d.all {
 		return "id=?", []any{id}
 	}
-	return "id=? AND workspace_id=?", []any{id, d.wid}
+	return "id=? AND user_id=?", []any{id, d.uid}
 }
 
 func newID() string { return newKey() }
@@ -1080,7 +970,7 @@ type Delivery struct {
 	ResponseStatus int
 	ResponseBody   string
 	PayloadJSON    string
-	WorkspaceID    int64
+	UserID         int64
 	CreatedAt      int64
 	UpdatedAt      int64
 	SentAt         int64
@@ -1092,13 +982,13 @@ func scanDel(sc interface{ Scan(...any) error }) (Delivery, error) {
 	var d Delivery
 	err := sc.Scan(&d.ID, &d.Key, &d.AccountID, &d.AccountEmail, &d.GmailID, &d.ThreadID, &d.RouteKey,
 		&d.RouteName, &d.TargetID, &d.TargetName, &d.Kind, &d.Status, &d.Attempts, &d.NextAttempt,
-		&d.LastError, &d.RequestLog, &d.ResponseStatus, &d.ResponseBody, &d.PayloadJSON, &d.CreatedAt, &d.UpdatedAt, &d.SentAt, &d.WorkspaceID)
+		&d.LastError, &d.RequestLog, &d.ResponseStatus, &d.ResponseBody, &d.PayloadJSON, &d.CreatedAt, &d.UpdatedAt, &d.SentAt, &d.UserID)
 	return d, err
 }
 
 const delCols = `id, delivery_key, account_id, account_email, gmail_id, thread_id, route_key, route_name,
 	target_id, target_name, kind, status, attempts, next_attempt, last_error, request_log, response_status,
-	response_body, payload_json, created_at, updated_at, sent_at, workspace_id`
+	response_body, payload_json, created_at, updated_at, sent_at, user_id`
 
 // DueDeliveries returns mail rows ready to send, skipping paused targets,
 // digest targets and disabled mailboxes.
@@ -1108,12 +998,12 @@ func (d *DB) DueDeliveries(nowUnix int64, limit int) ([]Delivery, error) {
 	}
 	q := `SELECT ` + delCols + ` FROM deliveries
 		WHERE status IN ('queued','retry') AND next_attempt<=?
-		AND target_id IN (SELECT id FROM targets WHERE paused=0 AND digest_at='' AND workspace_id=deliveries.workspace_id)
-		AND (kind!='mail' OR account_id NOT IN (SELECT id FROM accounts WHERE disabled=1 AND workspace_id=deliveries.workspace_id))`
+		AND target_id IN (SELECT id FROM targets WHERE paused=0 AND digest_at='' AND user_id=deliveries.user_id)
+		AND (kind!='mail' OR account_id NOT IN (SELECT id FROM accounts WHERE disabled=1 AND user_id=deliveries.user_id))`
 	args := []any{nowUnix}
 	if !d.all {
-		q += ` AND workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	q += ` ORDER BY id LIMIT ?`
 	args = append(args, limit)
@@ -1129,11 +1019,11 @@ func (d *DB) DueDeliveries(nowUnix int64, limit int) ([]Delivery, error) {
 func (d *DB) DigestCandidates(targetID int64, limit int) ([]Delivery, error) {
 	q := `SELECT ` + delCols + ` FROM deliveries
 		WHERE target_id=? AND status IN ('queued','retry') AND kind='mail'
-		AND (account_id NOT IN (SELECT id FROM accounts WHERE disabled=1 AND workspace_id=deliveries.workspace_id))`
+		AND (account_id NOT IN (SELECT id FROM accounts WHERE disabled=1 AND user_id=deliveries.user_id))`
 	args := []any{targetID}
 	if !d.all {
-		q += ` AND workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	q += ` ORDER BY id LIMIT ?`
 	args = append(args, limit)
@@ -1181,8 +1071,8 @@ func fillMessageMeta(d *DB, dels []Delivery) {
 	var args []any
 	b.WriteString(`SELECT account_id, gmail_id, from_addr, subject FROM messages WHERE `)
 	if !d.all {
-		b.WriteString(`workspace_id=? AND `)
-		args = append(args, d.wid)
+		b.WriteString(`user_id=? AND `)
+		args = append(args, d.uid)
 	}
 	b.WriteByte('(')
 	n := 0
@@ -1221,8 +1111,8 @@ func (d *DB) DeliveryByID(id int64) (Delivery, bool, error) {
 	q := `SELECT ` + delCols + ` FROM deliveries WHERE id=?`
 	args := []any{id}
 	if !d.all {
-		q += ` AND workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	row := d.SQL.QueryRow(q, args...)
 	del, err := scanDel(row)
@@ -1245,8 +1135,8 @@ func (d *DB) Deliveries(status, route, target string, limit int) ([]Delivery, er
 	q := `SELECT ` + delCols + ` FROM deliveries WHERE 1=1`
 	var args []any
 	if !d.all {
-		q += ` AND workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	if status != "" {
 		q += ` AND status=?`
@@ -1321,11 +1211,11 @@ func (d *DB) InsertDelivery(del Delivery) (int64, error) {
 	if del.NextAttempt == 0 {
 		del.NextAttempt = ts
 	}
-	res, err := d.SQL.Exec(`INSERT INTO deliveries(workspace_id, delivery_key, account_id, account_email, gmail_id, thread_id,
+	res, err := d.SQL.Exec(`INSERT INTO deliveries(user_id, delivery_key, account_id, account_email, gmail_id, thread_id,
 		route_key, route_name, target_id, target_name, kind, status, attempts, next_attempt, last_error,
 		request_log, response_status, response_body, payload_json, created_at, updated_at, sent_at)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		d.wid, del.Key, del.AccountID, del.AccountEmail, del.GmailID, del.ThreadID, del.RouteKey, del.RouteName,
+		d.uid, del.Key, del.AccountID, del.AccountEmail, del.GmailID, del.ThreadID, del.RouteKey, del.RouteName,
 		del.TargetID, del.TargetName, del.Kind, del.Status, del.Attempts, del.NextAttempt, del.LastError,
 		del.RequestLog, del.ResponseStatus, del.ResponseBody, del.PayloadJSON, ts, ts, del.SentAt)
 	if err != nil {
@@ -1374,8 +1264,8 @@ func (d *DB) ReplayWindow(route, target string, since, until int64) (int, error)
 		args = append(args, until)
 	}
 	if !d.all {
-		q += ` AND workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	res, err := d.SQL.Exec(q, args...)
 	if err != nil {
@@ -1391,8 +1281,8 @@ func (d *DB) HasNotify(routeKey string) bool {
 	q := `SELECT count(*) FROM deliveries WHERE route_key=? AND kind='notify'`
 	args := []any{routeKey}
 	if !d.all {
-		q += ` AND workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	_ = d.SQL.QueryRow(q, args...).Scan(&n)
 	return n > 0
@@ -1412,8 +1302,8 @@ func (d *DB) DeliveryCounts() (Counts, error) {
 	q := `SELECT status, count(*) FROM deliveries`
 	args := []any{}
 	if !d.all {
-		q += ` WHERE workspace_id=?`
-		args = append(args, d.wid)
+		q += ` WHERE user_id=?`
+		args = append(args, d.uid)
 	}
 	q += ` GROUP BY status`
 	rows, err := d.SQL.Query(q, args...)
@@ -1457,8 +1347,8 @@ func (d *DB) groupStats(col string) ([]Stat, error) {
 	q := `SELECT ` + col + `, count(*) FROM deliveries`
 	var args []any
 	if !d.all {
-		q += ` WHERE workspace_id=?`
-		args = append(args, d.wid)
+		q += ` WHERE user_id=?`
+		args = append(args, d.uid)
 	}
 	q += ` GROUP BY ` + col + ` ORDER BY count(*) DESC`
 	rows, err := d.SQL.Query(q, args...)
@@ -1482,8 +1372,8 @@ func (d *DB) ResetInflight() error {
 	q := `UPDATE deliveries SET status='queued' WHERE status='inflight'`
 	args := []any{}
 	if !d.all {
-		q += ` AND workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	_, err := d.SQL.Exec(q, args...)
 	return err
@@ -1494,8 +1384,8 @@ func (d *DB) Purge(before int64) (int, error) {
 	where := ""
 	args := []any{before}
 	if !d.all {
-		where = ` AND workspace_id=?`
-		args = append(args, d.wid)
+		where = ` AND user_id=?`
+		args = append(args, d.uid)
 	}
 	res, err := d.SQL.Exec(`DELETE FROM deliveries WHERE created_at<? AND status IN ('sent','dead')`+where, args...)
 	if err != nil {
@@ -1505,8 +1395,8 @@ func (d *DB) Purge(before int64) (int, error) {
 	msgWhere := ""
 	msgArgs := []any{before}
 	if !d.all {
-		msgWhere = ` AND workspace_id=?`
-		msgArgs = append(msgArgs, d.wid)
+		msgWhere = ` AND user_id=?`
+		msgArgs = append(msgArgs, d.uid)
 	}
 	res, err = d.SQL.Exec(`DELETE FROM messages WHERE created_at<? AND gmail_id NOT IN (SELECT gmail_id FROM deliveries)`+msgWhere, msgArgs...)
 	if err != nil {
@@ -1516,8 +1406,8 @@ func (d *DB) Purge(before int64) (int, error) {
 	aud := `DELETE FROM audit WHERE at<?`
 	audArgs := []any{before}
 	if !d.all {
-		aud += ` AND workspace_id=?`
-		audArgs = append(audArgs, d.wid)
+		aud += ` AND user_id=?`
+		audArgs = append(audArgs, d.uid)
 	}
 	_, _ = d.SQL.Exec(aud, audArgs...)
 	return int(n + m), nil
@@ -1531,8 +1421,8 @@ func (d *DB) MessageForDelivery(accountID int64, gmailID string) (StoredMessage,
 		WHERE m.account_id=? AND m.gmail_id=?`
 	args := []any{accountID, gmailID}
 	if !d.all {
-		q += ` AND m.workspace_id=?`
-		args = append(args, d.wid)
+		q += ` AND m.user_id=?`
+		args = append(args, d.uid)
 	}
 	row := d.SQL.QueryRow(q, args...)
 	m, err := scanMsg(row)

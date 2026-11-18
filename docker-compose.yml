@@ -1,5 +1,4 @@
-# Set PUBLIC_URL. OIDC is optional. AUTH_MODE is oidc, proxy, or none.
-# When AUTH_MODE is unset, OIDC is used if OIDC_* is set, otherwise sign-in is off.
+# Set PUBLIC_URL, GOOGLE_CLIENT_FILE, and PUBSUB_SA_FILE.
 # Local build: docker build -t ghook .
 services:
   ghook:
@@ -10,39 +9,25 @@ services:
       - 8080:8080
     environment:
       - PUBLIC_URL=https://ghook.example.com
-      - AUTH_MODE=oidc
-      - OIDC_ISSUER=https://auth.example.com
-      - OIDC_CLIENT_ID=ghook
-      - OIDC_CLIENT_SECRET=change-me
-      # Proxy mode (Authelia forward auth). LAN clients often arrive with no
-      # Remote-User because the proxy bypasses auth there.
-      # - AUTH_MODE=proxy
-      # - AUTH_TRUSTED_PROXIES=172.16.0.0/12,10.0.0.0/8
-      # - PROXY_FALLBACK_USER=admin
+      - GOOGLE_CLIENT_FILE=/run/secrets/google-client.json
+      - PUBSUB_SA_FILE=/run/secrets/pubsub-sa.json
+      - PUBSUB_TOPIC=gmail-inbox
+      - PUBSUB_SUBSCRIPTION=ghook-pull
+      # - METRICS_TOKEN=change-me
     volumes:
       - ./data:/data
+      - ./google-client.json:/run/secrets/google-client.json:ro
+      - ./pubsub-sa.json:/run/secrets/pubsub-sa.json:ro
     healthcheck:
       test: ["CMD", "/ghook", "healthcheck"]
       interval: 30s
       timeout: 5s
       retries: 3
-    # Behind Traefik with forward auth, put the middleware on the admin router
-    # and let these paths through with no auth middleware, at a higher priority:
-    #   /privacy
-    #   /terms
-    #   /healthz
-    #   /admin/google/callback
-    #   /hooks/pubsub
+    # Behind Traefik, a single host rule is enough. The app serves /login,
+    # /privacy, /terms, /healthz and the Google callback itself.
     # labels:
     #   - traefik.enable=true
     #   - traefik.http.routers.ghook.rule=Host(`ghook.example.com`)
     #   - traefik.http.routers.ghook.entryPoints=websecure
     #   - traefik.http.routers.ghook.tls.certresolver=le
-    #   - traefik.http.routers.ghook.middlewares=authelia@docker
-    #   - traefik.http.services.ghook.loadbalancer.server.port=8080
-    #   - traefik.http.routers.ghook-public.rule=Host(`ghook.example.com`) && (Path(`/privacy`) || Path(`/terms`) || Path(`/healthz`) || Path(`/admin/google/callback`) || PathPrefix(`/hooks/`))
-    #   - traefik.http.routers.ghook-public.entryPoints=websecure
-    #   - traefik.http.routers.ghook-public.tls.certresolver=le
-    #   - traefik.http.routers.ghook-public.priority=100
-    #   - traefik.http.routers.ghook-public.service=ghook
     #   - traefik.http.services.ghook.loadbalancer.server.port=8080

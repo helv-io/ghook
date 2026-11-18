@@ -211,21 +211,26 @@ a.name:hover code{border-color:var(--acc);color:var(--acc)}
 
 .offscreen{position:fixed;left:-9999px;top:0;opacity:0}
 
-/* forms: a .form is one column of width --form-w (.form.wide: 900px). Controls have no width of their own:
-   they fill their container (width:100%, border-box), and nested blocks (.group, details) only move the
-   left edge, so inputs, selects, textareas and pairs rows of every depth end at the same right edge. */
-.form{max-width:var(--form-w)}
+/* forms: a .form is one column of width --form-w (.form.wide: 900px). On wide
+   screens each .field is a two-column grid: a consistent label column and an
+   input column, so every control's left and right edges line up. Hints sit
+   under the input. Below 800px the grid stacks, label above input. */
+.form{max-width:var(--form-w);--label-col:12.5rem}
 .form.wide{--form-w:900px}
 /* in a dialog the form spans the dialog's width, like the tables above it */
 .dialog-body .form{max-width:none}
+.form>h3{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:22px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+.form>h3:first-of-type{margin-top:0;padding-top:0;border-top:0}
 .field{margin:0 0 12px}
+.form .field{display:grid;grid-template-columns:var(--label-col) minmax(0,1fr);column-gap:16px;row-gap:6px;align-items:center;margin:0 0 14px}
+.form .field>label,.form .field>.label{grid-column:1;display:block;margin:0;color:var(--dim);font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.form .field>input,.form .field>select,.form .field>textarea,.form .field>.control,.form .field>.checks{grid-column:2;min-width:0;width:100%;max-width:100%;justify-self:stretch}
+.form .field>p,.form .field>p.muted,.form .field>datalist{grid-column:2;margin:0}
+.form .checks{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 /* quick: a row of preset buttons under a field (expiration); finger-sized on phones */
 .quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .quick .act[aria-pressed=true]{color:var(--acc);border-color:var(--acc);background:#14202e}
 .field>p{margin:6px 0 0}
-.field>label,label,.field>.label{display:block;margin:10px 0 4px;color:var(--dim);font-size:14px}
-.field>label,.form label:not(.check),.field>.label{display:flex;flex-direction:column;align-items:stretch;gap:6px}
-.field>label:first-child,.field>.label:first-child{margin-top:0}
 label.check{display:inline-flex;align-items:center;gap:6px;margin:0 16px 0 0;color:var(--fg)}
 input,select,textarea{font:inherit;color:var(--fg);background:var(--well);border:1px solid var(--line);padding:5px 8px}
 input:not([type]),input[type=text],input[type=password],input[type=url],input[type=search],input[type=number],input[type=email],input[type=file],textarea,select{width:100%;display:block;max-width:100%;min-width:0;box-sizing:border-box}
@@ -384,8 +389,9 @@ details.desc>p{margin:4px 0 0 1.2em;color:var(--dim);white-space:pre-line}
 @media (prefers-reduced-motion:reduce){.reveal{animation:none}}
 
 /* solo pages (sign-in states, consent): one card, centered both ways; the page grows when the card is taller than the window */
-main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px}
 .login{width:min(460px,100%);margin:0}
+.login.legal{width:min(40rem,100%)}
 .brandmark{display:flex;align-items:center;gap:8px;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid var(--line2);font-weight:700;letter-spacing:.04em}
 .login .card{margin:0;padding:22px 22px 24px}
 .login .card h2{margin:0 0 10px}
@@ -481,6 +487,11 @@ main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;align-i
   .pair.single{grid-template-columns:minmax(0,1fr) auto}
   .pair.single>input:first-child{grid-column:1}
   .modal,.modal.wide{width:calc(100vw - 20px);max-width:calc(100vw - 20px);padding:14px}
+  /* forms: label above input, full width, no leftover label column */
+  .form{--label-col:0px}
+  .form .field{grid-template-columns:minmax(0,1fr);align-items:stretch}
+  .form .field>label,.form .field>.label,.form .field>input,.form .field>select,.form .field>textarea,.form .field>.control,.form .field>.checks,.form .field>p,.form .field>p.muted{grid-column:1}
+  .form>label.check{margin-left:0;max-width:100%}
 }
 @media (max-width:800px){
   .action-group{flex:1 1 100%}
@@ -505,8 +516,11 @@ html,body{touch-action:manipulation}
 .try-out{max-height:45vh;overflow:auto;word-break:break-word}
 
 /* long checks in a card wrap as a row instead of a single unbreakable line */
-.card label.check,.form label.check{display:block;margin:8px 0;line-height:1.45;max-width:100%;overflow-wrap:anywhere}
-.card label.check input,.form label.check input{margin-top:3px;margin-right:6px;vertical-align:text-top}
+.card label.check{display:block;margin:8px 0;line-height:1.45;max-width:100%;overflow-wrap:anywhere}
+.card label.check input{margin-top:3px;margin-right:6px;vertical-align:text-top}
+.form .checks label.check{display:flex;align-items:flex-start;margin:0;line-height:1.45;max-width:100%;overflow-wrap:anywhere}
+.form>label.check{display:flex;align-items:flex-start;margin:8px 0 8px calc(var(--label-col) + 16px);max-width:calc(100% - var(--label-col) - 16px);line-height:1.45;overflow-wrap:anywhere}
+.form label.check input{margin-top:3px;margin-right:6px;flex:0 0 auto}
 
 /* ghook: health stats, live feed, wizard, drag handle. Same tokens as the rest of the UI. */
 .skip{position:absolute;left:8px;top:-48px;z-index:100;background:var(--panel);color:var(--fg);border:1px solid var(--acc);padding:8px 12px}

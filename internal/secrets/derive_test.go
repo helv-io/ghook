@@ -2,7 +2,7 @@ package secrets
 
 import "testing"
 
-func TestDeriveIsolatesWorkspaces(t *testing.T) {
+func TestDeriveIsolatesUsers(t *testing.T) {
 	root, err := FromString("instance-passphrase")
 	if err != nil {
 		t.Fatal(err)
@@ -11,7 +11,7 @@ func TestDeriveIsolatesWorkspaces(t *testing.T) {
 	b := root.Derive(2)
 	sealed := a.Seal("mailbox-token")
 	if _, err := b.Open(sealed); err == nil {
-		t.Fatal("workspace B opened workspace A's secret")
+		t.Fatal("user B opened user A's secret")
 	}
 	got, err := a.Open(sealed)
 	if err != nil || got != "mailbox-token" {
