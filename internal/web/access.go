@@ -136,7 +136,7 @@ func (s *Server) pageFor(w http.ResponseWriter, r *http.Request, csrf string) (p
 	p := page{
 		CSRF: csrf, User: label, Toasts: s.takeFlash(w, r),
 		Role: role, WorkspaceID: chosen, Workspaces: wss,
-		ShowTeam: !s.RT.DB.SingleTenant(), AuthMode: s.RT.Cfg.AuthMode,
+		ShowTeam: true, ShowSwitcher: len(wss) > 1, AuthMode: s.RT.Cfg.AuthMode,
 	}
 	if s.RT.Cfg.Mode() == config.AuthNone {
 		p.Banner = "Sign-in is off. Anyone who can open this URL is the admin. Set AUTH_MODE=oidc or AUTH_MODE=proxy before you expose it."

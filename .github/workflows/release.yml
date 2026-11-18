@@ -1,6 +1,6 @@
 # Publishes ghcr.io/<owner>/ghook on every version tag (v*), linux/amd64 and linux/arm64.
 #
-# How it runs (same shape as skgate, one image variant):
+# How it runs (one image variant):
 #   test    gofmt, go vet, go test
 #   build   two jobs (native amd64 and native arm64, no emulation) push their image
 #           by digest only, with no tag, and keep their layers in a registry cache that every ref can read.

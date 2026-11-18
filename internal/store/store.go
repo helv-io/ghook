@@ -669,11 +669,17 @@ func (d *DB) SaveTarget(t Target, secret string, clearSecret bool) (Target, erro
 		paused = 1
 	}
 	if !ok || (t.ID == 0 && !ok) {
+		lastDigest := t.LastDigest
+		if strings.TrimSpace(t.DigestAt) != "" && lastDigest == 0 {
+			// Stamp now so a newly created digest does not fire for a time
+			// that has already passed today.
+			lastDigest = ts
+		}
 		res, err := d.SQL.Exec(`INSERT INTO targets(workspace_id, name, url, secret, auth_mode, auth_header, payload_template,
-			include_body, paused, quiet_start, quiet_end, digest_at, rate_per_minute, created_at, updated_at)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			include_body, paused, quiet_start, quiet_end, digest_at, rate_per_minute, last_digest, created_at, updated_at)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			d.wid, t.Name, t.URL, stored, t.AuthMode, strings.TrimSpace(t.AuthHeader), t.Template,
-			body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, ts, ts)
+			body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, lastDigest, ts, ts)
 		if err != nil {
 			return Target{}, err
 		}
@@ -685,10 +691,14 @@ func (d *DB) SaveTarget(t Target, secret string, clearSecret bool) (Target, erro
 	if id == 0 {
 		id = cur.ID
 	}
+	lastDigest := cur.LastDigest
+	if strings.TrimSpace(t.DigestAt) != "" && lastDigest == 0 {
+		lastDigest = ts
+	}
 	_, err = d.SQL.Exec(`UPDATE targets SET name=?, url=?, secret=?, auth_mode=?, auth_header=?, payload_template=?,
-		include_body=?, paused=?, quiet_start=?, quiet_end=?, digest_at=?, rate_per_minute=?, updated_at=? WHERE id=? AND workspace_id=?`,
+		include_body=?, paused=?, quiet_start=?, quiet_end=?, digest_at=?, rate_per_minute=?, last_digest=?, updated_at=? WHERE id=? AND workspace_id=?`,
 		t.Name, t.URL, stored, t.AuthMode, strings.TrimSpace(t.AuthHeader), t.Template,
-		body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, ts, id, d.wid)
+		body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, lastDigest, ts, id, d.wid)
 	if err != nil {
 		return Target{}, err
 	}
@@ -1074,6 +1084,8 @@ type Delivery struct {
 	CreatedAt      int64
 	UpdatedAt      int64
 	SentAt         int64
+	From           string
+	Subject        string
 }
 
 func scanDel(sc interface{ Scan(...any) error }) (Delivery, error) {
@@ -1146,6 +1158,64 @@ func collectDel(rows *sql.Rows) ([]Delivery, error) {
 	return out, rows.Err()
 }
 
+// fillMessageMeta attaches stored sender and subject onto delivery rows.
+func fillMessageMeta(d *DB, dels []Delivery) {
+	if len(dels) == 0 {
+		return
+	}
+	type key struct {
+		account int64
+		gmail   string
+	}
+	wanted := map[key]struct{}{}
+	for _, del := range dels {
+		if del.AccountID == 0 || del.GmailID == "" {
+			continue
+		}
+		wanted[key{del.AccountID, del.GmailID}] = struct{}{}
+	}
+	if len(wanted) == 0 {
+		return
+	}
+	var b strings.Builder
+	var args []any
+	b.WriteString(`SELECT account_id, gmail_id, from_addr, subject FROM messages WHERE `)
+	if !d.all {
+		b.WriteString(`workspace_id=? AND `)
+		args = append(args, d.wid)
+	}
+	b.WriteByte('(')
+	n := 0
+	for k := range wanted {
+		if n > 0 {
+			b.WriteString(" OR ")
+		}
+		b.WriteString(`(account_id=? AND gmail_id=?)`)
+		args = append(args, k.account, k.gmail)
+		n++
+	}
+	b.WriteByte(')')
+	rows, err := d.SQL.Query(b.String(), args...)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	meta := map[key][2]string{}
+	for rows.Next() {
+		var account int64
+		var gmail, from, subject string
+		if err := rows.Scan(&account, &gmail, &from, &subject); err != nil {
+			return
+		}
+		meta[key{account, gmail}] = [2]string{from, subject}
+	}
+	for i := range dels {
+		if v, ok := meta[key{dels[i].AccountID, dels[i].GmailID}]; ok {
+			dels[i].From, dels[i].Subject = v[0], v[1]
+		}
+	}
+}
+
 // DeliveryByID loads one row.
 func (d *DB) DeliveryByID(id int64) (Delivery, bool, error) {
 	q := `SELECT ` + delCols + ` FROM deliveries WHERE id=?`
@@ -1162,7 +1232,9 @@ func (d *DB) DeliveryByID(id int64) (Delivery, bool, error) {
 	if err != nil {
 		return Delivery{}, false, err
 	}
-	return del, true, nil
+	rows := []Delivery{del}
+	fillMessageMeta(d, rows)
+	return rows[0], true, nil
 }
 
 // Deliveries lists the log, newest first, with optional filters.
@@ -1194,7 +1266,12 @@ func (d *DB) Deliveries(status, route, target string, limit int) ([]Delivery, er
 	if err != nil {
 		return nil, err
 	}
-	return collectDel(rows)
+	out, err := collectDel(rows)
+	if err != nil {
+		return nil, err
+	}
+	fillMessageMeta(d, out)
+	return out, nil
 }
 
 // Claim moves a row to inflight if it is still queued. ok is false when another worker took it.

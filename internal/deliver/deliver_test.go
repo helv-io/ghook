@@ -210,6 +210,10 @@ func TestPauseQuietHoursDigestAndRate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Pin last_digest to the fake clock, not the wall clock.
+	if err := db.SetLastDigest(dig.ID, time.Date(2026, 11, 18, 23, 0, 0, 0, time.UTC).Unix()); err != nil {
+		t.Fatal(err)
+	}
 	queue(t, db, dig, "md1")
 	acc, _, _ := db.AccountByEmail("ada@example.com")
 	msg := mail.Message{ID: "md2", From: "a@example.com", Subject: "two", Date: time.Now().UTC(), Labels: []string{"INBOX"}}
@@ -276,5 +280,87 @@ func TestBackoff(t *testing.T) {
 	}
 	if Backoff(10, 10*time.Second, time.Minute) != time.Minute {
 		t.Fatal("cap")
+	}
+}
+
+func TestDigestDueNewTargetDoesNotFireAfterTodaysTime(t *testing.T) {
+	loc := time.UTC
+	created := time.Date(2026, 11, 18, 15, 0, 0, 0, loc)
+	if DigestDue(created, loc, "08:00", 0) {
+		t.Fatal("last_digest=0 must not fire after today's time")
+	}
+	if DigestDue(created, loc, "08:00", created.Unix()) {
+		t.Fatal("a target created after today's digest time must wait")
+	}
+	morning := time.Date(2026, 11, 19, 8, 5, 0, 0, loc)
+	if !DigestDue(morning, loc, "08:00", created.Unix()) {
+		t.Fatal("should fire the next morning")
+	}
+	before := time.Date(2026, 11, 19, 7, 0, 0, 0, loc)
+	if DigestDue(before, loc, "08:00", 0) || DigestDue(before, loc, "08:00", created.Unix()) {
+		t.Fatal("must still wait for the clock")
+	}
+}
+
+func TestNewDigestTargetDoesNotFireImmediately(t *testing.T) {
+	db := openDB(t)
+	created := time.Date(2026, 11, 18, 15, 0, 0, 0, time.UTC)
+	dig, err := db.SaveTarget(store.Target{Name: "digest", URL: "https://d.example.com/h", DigestAt: "08:00"}, "s", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetLastDigest(dig.ID, created.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	queue(t, db, dig, "md-new")
+	s := &script{}
+	w := &Worker{DB: db, HTTP: s, Now: func() time.Time { return created }, Locate: func() *time.Location { return time.UTC }}
+	w.Step(context.Background())
+	if len(s.bodies) != 0 {
+		t.Fatalf("new digest fired immediately: %v", s.bodies)
+	}
+	later := time.Date(2026, 11, 19, 8, 5, 0, 0, time.UTC)
+	w.Now = func() time.Time { return later }
+	w.Step(context.Background())
+	if len(s.bodies) != 1 || !strings.Contains(s.bodies[0], `"digest":true`) {
+		t.Fatalf("should fire the next morning: %v", s.bodies)
+	}
+}
+
+func TestRequestLogLeavesLessThanSign(t *testing.T) {
+	db := openDB(t)
+	tg, err := db.SaveTarget(store.Target{Name: "bot", URL: "https://bot.example.com/hook"}, "super-secret-key", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acc, err := db.SaveAccount("ada@example.com", "r", "", 0, "", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := mail.Message{ID: "m-lt", ThreadID: "th", From: "Ada <ada@example.com>", Subject: "A <B> C",
+		Snippet: "hi", Date: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC), Labels: []string{"INBOX"}}
+	if _, err := db.QueueAndAdvance(acc.ID, acc.Email, msg, []store.MatchPlan{{
+		RouteKey: "route:1", RouteName: "inbox", TargetID: tg.ID, TargetName: tg.Name,
+	}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	dels, _ := db.Deliveries("", "", "", 5)
+	if len(dels) == 0 {
+		t.Fatal("no delivery")
+	}
+	if dels[0].From != "Ada <ada@example.com>" || dels[0].Subject != "A <B> C" {
+		t.Fatalf("stored metadata: from=%q subject=%q", dels[0].From, dels[0].Subject)
+	}
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	due(t, db, now)
+	s := &script{}
+	w := &Worker{DB: db, HTTP: s, Now: func() time.Time { return now }}
+	w.Step(context.Background())
+	got, _, _ := db.DeliveryByID(dels[0].ID)
+	if strings.Contains(got.RequestLog, `\`+`u003c`) {
+		t.Fatalf("request log escaped <: %s", got.RequestLog)
+	}
+	if !strings.Contains(got.RequestLog, "Ada <ada@example.com>") || !strings.Contains(got.RequestLog, "A <B> C") {
+		t.Fatalf("request log missing raw <: %s", got.RequestLog)
 	}
 }

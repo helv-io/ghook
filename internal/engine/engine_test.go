@@ -176,6 +176,75 @@ func TestHistoryGoneFallsBackAndDedupesOverlap(t *testing.T) {
 	_ = ceo
 }
 
+func TestLabelConventionClaimsMailAndSuppressesFallback(t *testing.T) {
+	db := openDB(t)
+	if _, err := db.SaveAccount("ada@example.com", "refresh", "", 0, "gmail.readonly", "10"); err != nil {
+		t.Fatal(err)
+	}
+	cfo, err := db.SaveTarget(store.Target{Name: "CFO", URL: "https://cfo.example.com/hook"}, "s", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ceo, err := db.SaveTarget(store.Target{Name: "CEO", URL: "https://ceo.example.com/hook"}, "s", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.SaveRoute(store.Route{
+		Name: "Important, unclaimed", Enabled: true, Fallback: true, TargetID: ceo.ID,
+		Spec: match.Spec{Categories: []string{"primary"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.SetSetting("label_convention", "true")
+	msg := mail.Message{ID: "m-tax", ThreadID: "t1", From: "bank@example.com", Subject: "tax bill",
+		Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Labels: []string{"INBOX", "Ghook/CFO", "CATEGORY_PERSONAL"},
+		Category: "primary"}
+	f := &fakeGmail{history: map[string][]mail.Message{"10": {msg}}, latest: map[string]string{"10": "15"}}
+	eng := &Engine{DB: db, Clients: func(context.Context, string) (gmailx.Client, error) { return f, nil }}
+	if err := eng.Sync(context.Background(), "ada@example.com", "15"); err != nil {
+		t.Fatal(err)
+	}
+	dels, _ := db.Deliveries("", "", "", 10)
+	if len(dels) != 1 || dels[0].TargetName != "CFO" || dels[0].RouteName != "label:CFO" {
+		t.Fatalf("want only CFO via label, got %+v", dels)
+	}
+	prev, err := eng.Preview(context.Background(), []match.Route{{
+		Name: "Important, unclaimed", Enabled: true, Fallback: true, TargetID: ceo.ID, TargetName: "CEO",
+		Spec: match.Spec{Categories: []string{"primary"}},
+	}}, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prev) != 1 || prev[0].Route != "label:CFO" {
+		t.Fatalf("simulator should honor the label convention, got %+v", prev)
+	}
+	_ = cfo
+}
+
+func TestCatchUpSyncUpdatesLastNotification(t *testing.T) {
+	db := openDB(t)
+	if _, err := db.SaveAccount("ada@example.com", "refresh", "", 0, "gmail.readonly", "10"); err != nil {
+		t.Fatal(err)
+	}
+	acc, _, _ := db.AccountByEmail("ada@example.com")
+	if acc.LastNotify != 0 || acc.LastNotifyHistory != "" {
+		t.Fatalf("fresh account should have no notify: %+v", acc)
+	}
+	f := &fakeGmail{history: map[string][]mail.Message{"10": {}}, latest: map[string]string{"10": "22"}}
+	eng := &Engine{DB: db, Now: func() time.Time { return time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC) },
+		Clients: func(context.Context, string) (gmailx.Client, error) { return f, nil }}
+	if err := eng.Sync(context.Background(), "ada@example.com", ""); err != nil {
+		t.Fatal(err)
+	}
+	acc, _, _ = db.AccountByEmail("ada@example.com")
+	if acc.HistoryID != "22" {
+		t.Fatalf("history = %s", acc.HistoryID)
+	}
+	if acc.LastNotify == 0 || acc.LastNotifyHistory != "22" {
+		t.Fatalf("catch-up should update last notification: notify=%d hist=%q", acc.LastNotify, acc.LastNotifyHistory)
+	}
+}
+
 func TestUnknownAccountIsAckable(t *testing.T) {
 	db := openDB(t)
 	eng := &Engine{DB: db}

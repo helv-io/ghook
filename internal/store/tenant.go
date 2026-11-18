@@ -3,6 +3,8 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -81,6 +83,25 @@ func (d *DB) CreateWorkspace(name string, ownerID int64) (Workspace, error) {
 		}
 	}
 	return Workspace{ID: id, Name: name}, nil
+}
+
+// WorkspaceByRef finds a workspace by numeric id or by name (case-insensitive).
+func (d *DB) WorkspaceByRef(ref string) (Workspace, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return Workspace{}, errors.New("workspace is required")
+	}
+	var w Workspace
+	var err error
+	if id, perr := strconv.ParseInt(ref, 10, 64); perr == nil && id > 0 {
+		err = d.SQL.QueryRow(`SELECT id, name, created_at FROM workspaces WHERE id=?`, id).Scan(&w.ID, &w.Name, &w.CreatedAt)
+	} else {
+		err = d.SQL.QueryRow(`SELECT id, name, created_at FROM workspaces WHERE lower(name)=lower(?)`, ref).Scan(&w.ID, &w.Name, &w.CreatedAt)
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return Workspace{}, fmt.Errorf("workspace %q not found", ref)
+	}
+	return w, err
 }
 
 // UserCount is the number of identities.

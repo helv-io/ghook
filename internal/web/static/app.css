@@ -1,5 +1,5 @@
 /* ghook admin: one stylesheet, shared components only (no page-specific rules).
-   The visual system matches skgate: dark, thin lines, square corners, the same type and tokens.
+   Visual system: dark, thin lines, square corners, shared type and tokens.
    Components: .quick .login .brandmark .choices .card .table .tablewrap .primary .status .actions-cell .actions-th .copybox .copyhint .codehost .gated .helper-opener .si-status .tip .pill .chip .code .actions .act .toggle .btn .fill .form .field .pairs .pair .group .toast .modal .muted .row .dialog-head .dialog-body .reveal .dsec .danger-zone .action-groups .filter .logbar .logview .logline .logdivider .logjump .desc .desc-line .split .menu .inline .nav-btn .nav-panel .here
    Dark, thin lines, square corners. Sans-serif text; monospace only for aliases, URLs, tokens and code. */
 :root{--bg:#0e0f11;--panel:#121417;--hover:#171a1e;--fg:#d6d8db;--dim:#8b9097;--line:#2c3036;--line2:#22262b;
@@ -36,6 +36,9 @@ header .here,header .nav-btn{display:none}
 .nav-panel{display:contents}
 header .brand{display:flex;align-items:center;gap:8px;padding:9px 14px;border-right:1px solid var(--line);font-weight:700;letter-spacing:.04em}
 header .brand img{display:block}
+/* Product name: yellow with a soft glow so it stands out on the dark field.
+   #ffd100 on --bg / --panel is about 13:1, well above WCAG AAA. */
+.gh-word{color:#ffd100;text-shadow:0 0 8px rgba(255,209,0,.55),0 0 18px rgba(255,209,0,.22)}
 header a{padding:9px 14px;color:var(--dim);border-right:1px solid var(--line);white-space:nowrap}
 header a:hover{color:var(--fg);background:var(--hover);text-decoration:none}
 header a.on{color:var(--fg);background:var(--bg);box-shadow:inset 0 -2px 0 var(--acc)}
@@ -72,7 +75,8 @@ header form:last-child{margin-right:clamp(12px,2.5vw,32px)}
 .table td.wrap{white-space:normal;overflow-wrap:anywhere;min-width:160px}
 /* primary: the name; a long one wraps instead of pushing the row's actions out of view */
 .table td.primary{white-space:normal;overflow-wrap:anywhere;min-width:12ch}
-.table td.primary code{white-space:normal;overflow-wrap:anywhere;overflow-x:visible}
+.table td.primary code{white-space:nowrap;overflow-wrap:normal;word-break:normal;overflow-x:visible}
+.table td.primary code.path{white-space:normal}
 /* split: names and descriptions, about 30/70 (names wrap, the description gets the rest). A trailing actions column stays as wide as its buttons. Phones get cards. */
 @media (min-width:801px){.table.split th:first-child,.table.split td.primary{width:30%}.table.split td.wrap{width:70%}.table.split th.actions-th,.table.split td.actions-cell{width:1%}}
 /* trunc: the flexible column. max-width:0 lets the cell shrink to the space left (no horizontal
@@ -86,9 +90,11 @@ header form:last-child{margin-right:clamp(12px,2.5vw,32px)}
 
 /* code / mono */
 code,pre,.code,.mono{font-family:var(--mono);font-size:13px}
-/* Inline code chips wrap inside the line. Never nowrap + overflow-x:auto: that
-   draws a tiny horizontal scrollbar on values like gmail.modify in a checkbox label. */
-code,.code{background:var(--well);border:1px solid var(--line);padding:1px 6px;white-space:normal;overflow-wrap:anywhere;overflow-x:visible;display:inline;max-width:100%;vertical-align:baseline}
+/* Short code chips stay intact (no mid-word breaks like "Krame r"). Long
+   path chips (.path) may wrap only at "/", via <wbr> in the markup.
+   Never nowrap + overflow-x:auto: that draws a tiny horizontal scrollbar. */
+code,.code{background:var(--well);border:1px solid var(--line);padding:1px 6px;white-space:nowrap;overflow-wrap:normal;word-break:normal;overflow-x:visible;display:inline;max-width:100%;vertical-align:baseline}
+code.path,.code.path{white-space:normal;overflow-wrap:normal;word-break:normal}
 /* copybox: a value that copies itself when pressed. A little lighter than a code box, a hint line under the value,
    and the same hover, press and focus states as other buttons. The value wraps; nothing is cut off. */
 .copybox{display:block;width:100%;text-align:left;background:var(--raised);border:1px solid var(--line);padding:8px 12px;min-height:44px;color:var(--fg);line-height:1.4;white-space:normal;cursor:pointer}
@@ -218,10 +224,15 @@ a.name:hover code{border-color:var(--acc);color:var(--acc)}
 .quick .act[aria-pressed=true]{color:var(--acc);border-color:var(--acc);background:#14202e}
 .field>p{margin:6px 0 0}
 .field>label,label,.field>.label{display:block;margin:10px 0 4px;color:var(--dim);font-size:14px}
+.field>label,.form label:not(.check),.field>.label{display:flex;flex-direction:column;align-items:stretch;gap:6px}
 .field>label:first-child,.field>.label:first-child{margin-top:0}
 label.check{display:inline-flex;align-items:center;gap:6px;margin:0 16px 0 0;color:var(--fg)}
 input,select,textarea{font:inherit;color:var(--fg);background:var(--well);border:1px solid var(--line);padding:5px 8px}
-input[type=text],input[type=password],input[type=url],input[type=search],input[type=number],textarea,select{width:100%;display:block}
+input:not([type]),input[type=text],input[type=password],input[type=url],input[type=search],input[type=number],input[type=email],input[type=file],textarea,select{width:100%;display:block;max-width:100%;min-width:0;box-sizing:border-box}
+.row>label:not(.check){display:flex;flex-direction:row;align-items:center;gap:8px;margin:0;flex-wrap:wrap}
+.row>label:not(.check) input:not([type=checkbox]),.row>label:not(.check) select{width:auto;min-width:8em;display:inline-block}
+.sim-n{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;margin:0}
+.sim-n input{width:5em;display:inline-block;min-width:0}
 /* focus: one visible ring for everything the keyboard reaches (fields, quick buttons, links, menu items); a field
    also takes the accent border. Inside a menu or the nav panel the ring sits inside the item, so nothing clips it. */
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
@@ -301,7 +312,7 @@ textarea.code-src{display:none}
 .row.bottom>.field{flex:1 1 160px;margin:0}
 
 /* logview: a process's output. The bar above filters it; the view scrolls and follows the live stream, tinting stdout, stderr and
-   skgate's own notes differently (the source is also written out). A divider marks where a run starts. */
+   the process's own notes differently (the source is also written out). A divider marks where a run starts. */
 .logbar{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin:0 0 8px}
 .logbar input[type=search]{flex:1 1 220px;min-width:0;max-width:var(--form-w)}
 .logwrap{position:relative}
@@ -391,7 +402,8 @@ main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;align-i
 @media (max-width:800px){.quick .act{flex:1 1 30%;min-height:44px;text-align:center}}
 
 /* kv tables and details: long values wrap instead of widening the page */
-.table.kv code,.modal code{white-space:normal;overflow-wrap:anywhere;overflow-x:visible}
+.table.kv code,.modal code{white-space:nowrap;overflow-wrap:normal;word-break:normal;overflow-x:visible}
+.table.kv code.path,.modal code.path{white-space:normal}
 .modal{max-height:calc(100dvh - 24px);overflow-y:auto;overflow-x:hidden}
 .modal .tablewrap{overflow-x:visible}
 
@@ -428,7 +440,9 @@ main.solo{max-width:none;min-height:100vh;min-height:100dvh;display:flex;align-i
   .table:not(.kv) td.actions-cell .actions>.act{flex:1 1 0;min-width:0}
   .table:not(.kv) td.empty{justify-content:center;flex-basis:100%}
   .table:not(.kv) td.empty::before{content:none}
-  .table:not(.kv) code,.table:not(.kv) .code{white-space:normal;overflow-wrap:anywhere;overflow-x:visible;max-width:100%}
+  .table:not(.kv) code,.table:not(.kv) .code{white-space:nowrap;overflow-wrap:normal;word-break:normal;overflow-x:visible;max-width:100%}
+  .table:not(.kv) code.path{white-space:normal}
+  .table:not(.kv) td.trunc code,.table:not(.kv) td.trunc .code{white-space:normal;overflow:hidden;overflow-x:hidden;text-overflow:ellipsis;word-break:break-word}
   .table:not(.kv) td.trunc .chip{max-width:100%;white-space:normal}
   /* buttons: large tap targets, two per line, the row wraps */
   .actions{flex-wrap:wrap;gap:8px;width:100%;white-space:normal}
@@ -510,3 +524,10 @@ tr.dragging{opacity:.55}
 kbd{font-family:var(--mono);font-size:12px;border:1px solid var(--line);background:var(--well);padding:0 5px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:800px){.grid2{grid-template-columns:1fr}}
+
+/* accounts: each setup section is a collapsible card */
+details.card{padding-top:10px}
+details.card>summary{margin:0;cursor:pointer;list-style:none}
+details.card>summary h3{display:inline;margin:0}
+details.card>summary{padding-bottom:4px}
+details.card:not([open]){padding-bottom:10px}

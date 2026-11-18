@@ -283,7 +283,7 @@ func (w *Worker) build(ctx context.Context, d store.Delivery, t store.Target) (b
 		}
 		return buf.Bytes(), plain, nil
 	}
-	raw, err := json.Marshal(p)
+	raw, err := encodeJSON(p)
 	return raw, plain, err
 }
 
@@ -354,6 +354,16 @@ func logRequest(req *http.Request, body []byte, secret, plain string, retain boo
 	}
 	b.WriteString(logged)
 	return b.String()
+}
+
+func encodeJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 func clip(s string) string {
@@ -435,7 +445,8 @@ func DigestDue(now time.Time, loc *time.Location, at string, lastUnix int64) boo
 		return false
 	}
 	if lastUnix == 0 {
-		return true
+		// A brand-new target must not backfill today's already-passed slot.
+		return false
 	}
 	last := time.Unix(lastUnix, 0).In(loc)
 	return last.Before(moment)
@@ -486,7 +497,7 @@ func (w *Worker) digests(ctx context.Context, now time.Time) {
 			continue
 		}
 		env := map[string]any{"source": "ghook", "digest": true, "target": full.Name, "count": len(items), "items": items}
-		body, _ := json.Marshal(env)
+		body, _ := encodeJSON(env)
 		key := fmt.Sprintf("digest-%d-%d", full.ID, now.Unix())
 		status, resp, reqLog, err := w.post(ctx, full, key, body, "")
 		st := "sent"
@@ -537,7 +548,7 @@ func (w *Worker) SendTest(ctx context.Context, db *store.DB, targetID int64) (st
 	}
 	d, _, _ := db.DeliveryByID(id)
 	p.DeliveryID = d.Key
-	body, _ := json.Marshal(p)
+	body, _ := encodeJSON(p)
 	status, resp, reqLog, err := w.post(ctx, t, d.Key, body, "")
 	st := "sent"
 	msg := ""

@@ -1,3 +1,3 @@
 {{define "body"}}<div class="login"><div class="card">{{template "brandmark"}}<h2>Sign-in failed</h2>
-<p>{{if .Err}}{{.Err}}{{else}}The identity provider rejected the sign-in.{{end}}</p>
+<p>{{if .Err}}{{wordmark .Err}}{{else}}The identity provider rejected the sign-in.{{end}}</p>
 <div class="choices"><a class="btn" href="/admin/oidc/login">Try again</a></div></div></div>{{end}}

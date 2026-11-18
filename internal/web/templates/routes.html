@@ -1,7 +1,7 @@
 {{define "body"}}
 <div class="row spread"><h2>Routes</h2><a class="btn" href="/admin/routes/new">Add route</a></div>
 <p>First match wins unless the route says continue. A fallback runs only when nothing else matched, and it still has a filter. Drag a row, or focus it and press Alt+arrow.</p>
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+{{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <div class="filter"><input type="search" data-search data-filter="#routes" placeholder="Filter routes" aria-label="Filter routes"></div>
 <div class="card flush tablewrap"><table class="table" id="routes" data-reorder="/admin/routes/reorder">
 <thead><tr><th></th><th>Name</th><th>Match</th><th>Target</th><th></th></tr></thead>
@@ -21,7 +21,7 @@
 <p>Runs the saved rules against the last stored messages. Body text is fetched live when the mailbox is connected and is not kept.</p>
 <form method="post" action="/admin/routes/simulate" class="row">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
-<label>Last <input type="number" name="n" value="{{if .PreviewN}}{{.PreviewN}}{{else}}20{{end}}" min="1" max="100" style="width:5em"> messages</label>
+<label class="sim-n">Last <input type="number" name="n" value="{{if .PreviewN}}{{.PreviewN}}{{else}}20{{end}}" min="1" max="100"> messages</label>
 <button class="btn" type="submit">Run simulator</button>
 </form>
 {{if .Previews}}<div class="tablewrap"><table class="table"><thead><tr><th>From</th><th>Subject</th><th>Would hit</th></tr></thead><tbody>

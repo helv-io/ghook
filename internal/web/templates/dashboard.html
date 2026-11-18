@@ -3,7 +3,7 @@
 <div class="stats">
 {{range .Checks}}<div class="stat"><b class="{{.Class}}">{{.Value}}</b><span>{{.Label}}</span></div>{{end}}
 </div>
-{{if .Err}}<div class="callout bad">{{.Err}}</div>{{end}}
+{{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 {{if .Setup}}<div class="card"><h3>Finish setup</h3><ol>
 {{range .Setup}}<li>{{.}}</li>{{end}}
 </ol><p><a class="btn" href="/admin/accounts">Open the setup wizard</a></p></div>{{end}}

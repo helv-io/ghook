@@ -16,6 +16,7 @@ import (
 	"github.com/helv-io/ghook/internal/match"
 	"github.com/helv-io/ghook/internal/pubsubx"
 	"github.com/helv-io/ghook/internal/store"
+	"github.com/helv-io/ghook/internal/when"
 	"google.golang.org/api/idtoken"
 )
 
@@ -478,7 +479,7 @@ func (s *Server) deliveryReplay(w http.ResponseWriter, r *http.Request, p page) 
 }
 
 func (s *Server) deliveryWindow(w http.ResponseWriter, r *http.Request, p page) {
-	n, err := s.db(r).ReplayWindow(strings.TrimSpace(r.FormValue("route")), strings.TrimSpace(r.FormValue("target")), parseTime(r.FormValue("since")), parseTime(r.FormValue("until")))
+	n, err := s.db(r).ReplayWindow(strings.TrimSpace(r.FormValue("route")), strings.TrimSpace(r.FormValue("target")), parseTime(r.FormValue("since"), s.loc()), parseTime(r.FormValue("until"), s.loc()))
 	if err != nil {
 		s.redirect(w, r, "/admin/deliveries", "bad", "Could not replay that window.")
 		return
@@ -530,27 +531,16 @@ func (s *Server) createWorkspace(w http.ResponseWriter, r *http.Request, p page)
 		http.Error(w, "only an instance admin can create a workspace", http.StatusForbidden)
 		return
 	}
-	ws, err := s.RT.DB.CreateWorkspace(r.FormValue("name"), u.ID)
+	_, err := s.RT.DB.CreateWorkspace(r.FormValue("name"), u.ID)
 	if err != nil {
 		s.redirect(w, r, "/admin/members", "bad", safeErr(err))
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "ghook_ws", Value: strconv.FormatInt(ws.ID, 10), Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: s.secure()})
-	s.redirect(w, r, "/admin", "ok", "Workspace created.")
+	s.redirect(w, r, "/admin/members", "ok", "Workspace created. Switch to it from the header when you want.")
 }
 
-func parseTime(s string) int64 {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.Unix()
-	}
-	if t, err := time.Parse("2006-01-02", s); err == nil {
-		return t.Unix()
-	}
-	return 0
+func parseTime(s string, loc *time.Location) int64 {
+	return when.Parse(s, loc)
 }
 
 func (s *Server) settings(w http.ResponseWriter, r *http.Request, p page) {

@@ -37,6 +37,22 @@ func TestFromAddressAndDomain(t *testing.T) {
 	if !(Spec{From: []string{"nope@nope.test", "ada@example.com"}}).Match(m) {
 		t.Fatal("list is OR")
 	}
+	sub := mail.Message{From: "Capital One <alerts@notification.capitalone.com>"}
+	if !(Spec{From: []string{"capitalone.com"}}).Match(sub) {
+		t.Fatal("bare domain must match a subdomain")
+	}
+	if !(Spec{From: []string{"@capitalone.com"}}).Match(sub) {
+		t.Fatal("@domain must match a subdomain")
+	}
+	if !(Spec{From: []string{"*.capitalone.com"}}).Match(sub) {
+		t.Fatal("*.domain must match a subdomain")
+	}
+	if (Spec{From: []string{"capitalone.com"}}).Match(mail.Message{From: "eve@notcapitalone.com"}) {
+		t.Fatal("suffix lookalike must not match")
+	}
+	if (Spec{From: []string{"capitalone.com"}}).Match(mail.Message{From: "eve@example.com"}) {
+		t.Fatal("unrelated domain must not match")
+	}
 }
 
 func TestSubjectContainsLabelsCategoryAttachment(t *testing.T) {
@@ -159,4 +175,22 @@ func names(rs []Route) []string {
 		n = append(n, r.Name)
 	}
 	return n
+}
+
+func TestDecideClaimedSuppressesFallback(t *testing.T) {
+	m := msg()
+	m.From = "billing@other.test"
+	m.Subject = "tax bill"
+	routes := []Route{
+		{Name: "ada", Enabled: true, TargetName: "ada-bot", Spec: Spec{From: []string{"ada@example.com"}}},
+		{Name: "fallback", Enabled: true, Fallback: true, TargetName: "ceo", Spec: Spec{Categories: []string{"primary"}}},
+	}
+	hits := Decide(routes, m)
+	if len(hits) != 1 || hits[0].Name != "fallback" {
+		t.Fatalf("unclaimed should fall back: %+v", names(hits))
+	}
+	hits = DecideClaimed(routes, m, true)
+	if len(hits) != 0 {
+		t.Fatalf("claimed by a Ghook/ label must not fall back: %+v", names(hits))
+	}
 }
