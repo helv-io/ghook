@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/helv-io/ghook/internal/feed"
+	"github.com/helv-io/ghook/internal/payloadenc"
 	"github.com/helv-io/ghook/internal/store"
 )
 
@@ -180,7 +181,7 @@ func (w *Worker) one(ctx context.Context, d store.Delivery, now time.Time) {
 	}
 	_ = w.DB.Finish(d.ID, "sent", d.Attempts+1, now.Unix(), "", reqLog, status, resp)
 	if w.Feed != nil {
-		w.Feed.Add("delivery", fmt.Sprintf("%s → %s sent", d.RouteName, t.Name))
+		w.Feed.AddFor(d.UserID, "delivery", fmt.Sprintf("%s → %s sent", d.RouteName, t.Name))
 	}
 }
 
@@ -213,7 +214,7 @@ func (w *Worker) fail(d store.Delivery, t store.Target, now time.Time, msg, reqL
 
 func (w *Worker) notifyDead(d store.Delivery, t store.Target, msg string) {
 	if w.Feed != nil {
-		w.Feed.Add("error", fmt.Sprintf("%s → %s dead: %s", d.RouteName, t.Name, msg))
+		w.Feed.AddFor(d.UserID, "error", fmt.Sprintf("%s → %s dead: %s", d.RouteName, t.Name, msg))
 	}
 	if d.Kind == "notify" || !w.DB.BoolSetting("notify_dead", true) {
 		return
@@ -288,11 +289,23 @@ func (w *Worker) build(ctx context.Context, d store.Delivery, t store.Target) (b
 }
 
 func (w *Worker) post(ctx context.Context, t store.Target, deliveryID string, body []byte, plain string) (int, string, string, error) {
+	ctype := "application/json"
+	if t.PayloadPubKey != "" {
+		enc, err := payloadenc.Encrypt(t.PayloadPubKey, body)
+		if err != nil {
+			return 0, "", "", err
+		}
+		body = enc
+		ctype = "application/age"
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.URL, bytes.NewReader(body))
 	if err != nil {
 		return 0, "", "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", ctype)
+	if ctype == "application/age" {
+		req.Header.Set("X-Ghook-Encrypted", "age")
+	}
 	req.Header.Set("User-Agent", "ghook")
 	req.Header.Set("X-Ghook-Delivery", deliveryID)
 	switch t.AuthMode {
@@ -517,7 +530,7 @@ func (w *Worker) digests(ctx context.Context, now time.Time) {
 		}
 		_ = w.DB.SetLastDigest(full.ID, now.Unix())
 		if w.Feed != nil {
-			w.Feed.Add("delivery", fmt.Sprintf("digest → %s (%d)", full.Name, len(items)))
+			w.Feed.AddFor(full.UserID, "delivery", fmt.Sprintf("digest → %s (%d)", full.Name, len(items)))
 		}
 	}
 }

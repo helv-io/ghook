@@ -1,7 +1,7 @@
 {{define "body"}}
 <h2>Settings</h2>
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
-<form method="post" action="/admin/settings" class="form wide">
+<form method="post" action="/admin/settings" class="form wide" data-autosave="/admin/settings">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <h3>Labels</h3>
 <div class="field"><label for="label_prefix">Label prefix</label>
@@ -38,7 +38,6 @@
 <label class="check"><input type="checkbox" name="notify_watch" value="1" {{if .NotifyWatch}}checked{{end}}> Notify when a watch renewal fails</label>
 <h3>Usage</h3>
 <p class="muted">This account may have {{.MaxTargets}} targets, {{.MaxRoutes}} routes, and {{.MaxDeliveries}} deliveries per day. Used: {{.TargetCount}} targets, {{.RouteCount}} routes, {{.TodayCount}} deliveries today (UTC).</p>
-<div class="row"><button class="btn fill" type="submit">Save settings</button></div>
 </form>
 
 <h2>Export and import</h2>

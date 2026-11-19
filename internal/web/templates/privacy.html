@@ -2,9 +2,11 @@
 <div class="login legal">{{template "brandmark"}}
 <h2>Privacy</h2>
 <p><span class="gh-word">ghook</span> is self-hosted software that can serve many Google accounts on one instance. This instance is run by its operator, on the operator's own server.</p>
-<p><span class="gh-word">ghook</span> reads Gmail metadata only so it can route notifications to the webhooks you configure. A message body is fetched only when a webhook is explicitly set to include it, and it is not kept unless you turn retention of bodies on.</p>
+<p><span class="gh-word">ghook</span> reads Gmail metadata so it can route notifications to the webhooks you configure. A message body is fetched only when a webhook is explicitly set to include it, and it is not kept unless you turn retention of bodies on. Delivery logs keep metadata (message id, route, target, status, timing) by default.</p>
 <p>Each signed-in user sees only their own mailboxes, routes, targets, deliveries and settings. <span class="gh-word">ghook</span> does not sell data. <span class="gh-word">ghook</span> does not share a user's data with anyone except the webhooks that user configures.</p>
-<p>Mail metadata, routes, and secrets stay in the database on the operator's server. Target secrets and Google tokens are encrypted at rest. There is no separate <span class="gh-word">ghook</span> account service. You can sign out, or delete your account and data, from the account page.</p>
+<p>This is not end-to-end encryption. <span class="gh-word">ghook</span> has to process mail in memory to decide which webhook to call. Google tokens, target secrets, route match fields, and any stored payloads are encrypted at rest with a per-user key that is wrapped by the operator's instance key. The operator who has both the database and that instance key can decrypt those fields. A copy of the database file without the instance key cannot. Login and mailbox addresses stay in the clear because they are used to look up incoming notifications.</p>
+<p>A webhook can be given an age public key so the posted body is encrypted for the receiver. <span class="gh-word">ghook</span> still sees that body in memory before it encrypts the POST. Running the process in a confidential VM is a possible later hardening; this version does not do that.</p>
+<p>You can sign out, or delete your account and data, from the account page. Deleting an account destroys the per-user key and then deletes the rows, so leftover ciphertext cannot be opened. There is no separate <span class="gh-word">ghook</span> account service.</p>
 <p class="muted"><a href="/login">Sign in</a> · <a href="/terms">Terms</a></p>
 </div>
 {{end}}

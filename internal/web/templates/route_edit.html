@@ -1,14 +1,14 @@
 {{define "body"}}
 <h2>{{if .IsNew}}New route{{else}}Edit route{{end}}</h2>
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
-<form method="post" action="/admin/routes/save" class="form wide">
+<form method="post" action="/admin/routes/save" class="form wide"{{if not .IsNew}} data-autosave="/admin/routes/save"{{end}}>
 <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Route.ID}}">
 <div class="card" id="simulator">
 <h3>Simulator</h3>
 <p>Runs this draft against the last stored messages, including the label convention. Body text is fetched live when the mailbox is connected and is not kept.</p>
 <div class="row">
 <button class="act" type="submit" formaction="/admin/routes/preview">Simulate this draft</button>
-<label class="sim-n">Last <input type="number" name="n" value="20" min="1" max="100"> messages</label>
+<label class="sim-n">Last <input type="number" name="n" value="20" min="1" max="100" data-no-autosave> messages</label>
 </div>
 {{if .Previews}}<div class="tablewrap"><table class="table"><thead><tr><th>From</th><th>Subject</th><th>Would hit</th></tr></thead><tbody>
 {{range .Previews}}<tr><td data-label="From">{{.From}}</td><td class="wrap" data-label="Subject">{{.Subject}}</td><td data-label="Would hit">{{if .Route}}<span class="pill ok">{{.Route}}</span>{{else}}<span class="pill off">no route</span>{{end}}</td></tr>{{end}}
@@ -47,7 +47,7 @@
 <div class="checks">{{range .Categories}}<label class="check"><input type="checkbox" name="category" value="{{.}}" {{if has $.Route.Spec.Categories .}}checked{{end}}>{{.}}</label>{{end}}</div></div>
 <div class="field"><label for="attachment">Attachment</label>
 <select id="attachment" name="attachment"><option value="" {{if eq .Route.Spec.Attachment ""}}selected{{end}}>any</option><option value="yes" {{if eq .Route.Spec.Attachment "yes"}}selected{{end}}>has an attachment</option><option value="no" {{if eq .Route.Spec.Attachment "no"}}selected{{end}}>no attachment</option></select></div>
-<div class="row"><button class="btn fill" type="submit">Save</button>
-<a class="act" href="/admin/routes">Cancel</a></div>
+{{if .IsNew}}<div class="row"><button class="btn fill" type="submit">Create</button>
+<a class="act" href="/admin/routes">Cancel</a></div>{{else}}<div class="row"><a class="act" href="/admin/routes">Back to routes</a></div>{{end}}
 </form>
 {{end}}

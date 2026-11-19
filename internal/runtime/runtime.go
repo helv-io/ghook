@@ -158,9 +158,9 @@ func (a *App) purge() {
 			continue
 		}
 		n += k
-	}
-	if n > 0 {
-		a.Feed.Add("sync", "Purged old mail metadata")
+		if k > 0 {
+			a.Feed.AddFor(u.ID, "sync", "Purged old mail metadata")
+		}
 	}
 }
 

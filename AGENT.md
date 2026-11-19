@@ -24,11 +24,11 @@ ghook is a multi-tenant Gmail push router: Gmail `users.watch` in, webhook POST 
 
 - Shared styles and components, never page by page. New markup goes in `internal/web/templates/components.html` and `internal/web/static/app.css`. No inline `style=` or `on*=`, and no page-specific CSS rules.
 - The top bar is sticky on every page and width (`position:sticky;top:0`, opaque, `--z-header`, below menus, dialogs and `--z-toast`). `--header-h` (kept by `app.js`) is the `scroll-padding-top`. Below 800 px it is one row: brand, current page name, a Menu button. The links, version, user and logout fold into `.nav-panel`. Wider windows keep the links in the bar. Standalone screens (login, privacy, terms) have no bar.
-- No horizontal overflow, down to 360 px, on any public or admin page. Short code chips and badges do not break mid-word. Long paths may wrap at `/` (class `path`, with `<wbr>` after each slash). Never set `white-space:nowrap` with `overflow-x:auto` on inline code. `pre` wraps. Tables and cards do not create a page or element horizontal scrollbar. After a CSS or template change, run the headless overflow audit at 1280, 768 and 375 (and 360 if the layout changed).
+- No horizontal overflow, down to 360 px, on any public or admin page. Short code chips and badges do not break mid-word. A checkbox and its label are one inline flow (`label.check` is `display:block` with ordinary wrapping). Never put the label text in flex or grid cells that can shrink mid-word. `.gh-word` is `display:inline;white-space:nowrap` and must never split. Long paths may wrap only at `/` (`code.path`, each segment in `.path-seg`, `<wbr>` after each slash). Never set `white-space:nowrap` with `overflow-x:auto` on inline code. `pre` wraps. Tables and cards do not create a page or element horizontal scrollbar. After a CSS or template change, run `scripts/layout-audit.py` at 1440, 1024, 768 and 390 (and 360 if the layout changed). The audit fails on mid-word wrap, a text run narrower than about three characters, or a wordmark that breaks across client rects. A `scrollWidth` check alone is not enough (`scrollbar-gutter:stable` can hide overflow).
 - The product name is always lowercase `ghook`, including the start of a sentence and in titles. The only `Ghook` spellings that stay are ones lowercase cannot express, such as a Go exported identifier or the wire header names `X-Ghook-Delivery` and `X-Ghook-Signature`. In visible prose the name uses the reusable wordmark: `<span class="gh-word">ghook</span>`. The class is `#ffd100` with a soft yellow `text-shadow`. Do not wrap the word inside code chips (`ghook/CFO`, `X-Ghook-Delivery`), form values, placeholders, `<option>` text, or the document `<title>`. Dynamic errors and toasts go through the `wordmark` template func, which escapes first, matches the whole word only, and always renders lowercase.
 - Chips that name a label path show the full text and wrap, never an ellipsis. Write `ghook/Routed/<target>`, not `ghook/Routed/…`.
 - List tables are tables above 800 px and a stack of cards below it, from the same markup. Every data cell on those tables carries `data-label`.
-- No page is rendered by a POST. Screens are GET and can be refreshed. A change is a POST that answers 303 to a screen.
+- No page is rendered by a POST. Screens are GET and can be refreshed. A change is a POST that answers 303 to a screen. Exception: a form with `data-autosave` may answer JSON when the request asks for it (`Accept: application/json` or `X-Requested-With: fetch`) and leave the user on the GET screen. A non-JS POST still answers 303.
 
 ## Security
 
@@ -72,11 +72,58 @@ Other conventions:
   ```
 
   CI runs the same three on every push and pull request.
-- 0.1.3 needs a fresh database. Opening a workspace-era file is an error; back it up and replace it. Later changes should stay additive.
+- 0.1.3 needed a fresh database (a workspace-era file is still an error). 0.1.4 opens a 0.1.3 database and migrates in place: it adds `user_keys` and `targets.payload_pubkey`, mints a per-user DEK, and re-seals `enc:v1` values as `enc:v2`. Do not wipe a 0.1.3 data directory to upgrade. Later changes should stay additive.
 - Boot settings come from the environment (see `.env.example`). The Google client and the shared Pub/Sub subscription are instance-wide. Routes, targets, and retention live in SQLite, scoped by `user_id`.
-- Every query and admin endpoint is scoped to the signed-in user. Tests must keep proving user A cannot see or modify user B's routes, targets, logs, or Gmail state.
-- Target secrets and Google tokens stay sealed at rest (`secrets.Box`, derived per user).
+- Every query and admin endpoint is scoped to the signed-in user. Tests must keep proving user A cannot see or modify user B's routes, targets, logs, or Gmail state. The activity feed is per user (`AddFor` / `BacklogFor`).
 - Update README and `.env.example` in the same change when you add or rename a boot variable.
+
+
+## Autosave
+
+There is no Save button on an existing resource. Creation of a new route or target still uses a single Create action. Disconnect, delete, and other destructive actions still use a confirm dialog; those are not saves.
+
+- Forms that edit an existing row have `data-autosave`. The client POSTs the whole `FormData` (so an unchecked box is stored as off) with the CSRF token.
+- Checkboxes, selects and toggles save on `change` (100ms debounce). Text inputs save on `blur` and Enter (200ms debounce).
+- Skip fields or forms marked `data-no-autosave` (the route simulator's `n` is one). An empty secret field is not sent, so it does not clear the stored secret.
+- Validation errors are shown next to the field. A failed save flags or reverts the value and shows an error toast.
+- Delete must be its own form. If Delete is the only submit button on the edit form, Enter would fire it.
+- Toggling an optional Gmail scope submits the scopes form and starts the Google re-consent redirect. A one-line note on the page says it goes through Google. That is a navigation, not a toast.
+
+## Toast API
+
+`toast(message, {kind, duration})` in `internal/web/static/app.js`.
+
+- `kind` is `success`, `error`, or `info`. Legacy aliases: `ok` → `success`, `bad` → `error`, `warn` → `info`.
+- Default duration: success 1s, error 4s, info 4s. The "Saved" confirmation is exactly 1s (`{kind:"success", duration:1000}`).
+- Toasts stack in `.toasts` (`role="status"`, `aria-live="polite"`). The container is always in `layout.html`.
+- Placement: bottom-right on desktop, bottom-center below 800px. The stack is `pointer-events:none`; each toast is `auto`. Toasts are non-blocking and must not shift the page layout.
+- `prefers-reduced-motion: reduce` disables the fade.
+
+## Data protection
+
+ghook must read mail in memory to decide a route, so this is not end-to-end encryption. Be honest about that in the README and the privacy page. Confidential VMs are a possible future hardening, not something this version does.
+
+What is stored:
+
+- Delivery logs keep metadata (message id, route, target, status, timing). Email bodies and snippets are not written unless the user turns `retain_bodies` on. Retained payloads, request logs and response bodies are sealed and purged after the retention window.
+- Login and mailbox addresses (`users.email`, `accounts.email`) stay in the clear. They are lookup keys for the shared Pub/Sub `emailAddress`.
+- Route `match_json` is sealed (it can hold addresses and subject patterns).
+
+Envelope encryption at rest:
+
+- Each user has a random DEK, wrapped by the instance KEK and stored in `user_keys`. The KEK is `SECRETS_KEY` or `/data/secrets.key`. `secrets.KEK` is the interface; `LocalKEK` is the current implementation. A GCP KMS wrapper can be plugged in later without changing callers.
+- New ciphertext uses `enc:v2:` (the DEK). `Open` still accepts `enc:v1:` (the previous HMAC-derived key) so a 0.1.3 database keeps working until the first `Use` re-seals those rows.
+- Sealed fields: Google refresh and access tokens, target secrets and auth headers, any stored payloads, and `routes.match_json`.
+- `ghook keys rotate [--user EMAIL|ID|--all]` mints a new DEK and re-seals. `ghook keys rotate-kek` re-wraps every DEK and swaps the key file (file-backed KEK only; `SECRETS_KEY` must be unset). The previous file is kept as `secrets.key.bak`. Neither command prints key material.
+- Deleting an account destroys the wrapped DEK first in the same transaction (crypto-shred), then deletes the rows.
+
+Optional per-target payload encryption: a target may supply an `age1…` X25519 public key. ghook encrypts the outbound body (`Content-Type: application/age`, `X-Ghook-Encrypted: age`). The HMAC is over the bytes actually sent. Only the holder of the matching secret can read that body.
+
+Logs and metrics never include secrets. Email addresses in logs are redacted (`ada@example.com` → `a***@example.com`). `/metrics` is aggregate only and includes no emails.
+
+A stolen database file without the KEK cannot open tokens, secrets, or sealed payloads. An operator who has both the database and the KEK can. Document that plainly.
+
+Tests must cover an encryption round-trip, DEK rotation, crypto-shred, a v1→v2 migration, and a grep of the SQLite file for plaintext secrets.
 
 ## Release
 

@@ -1,7 +1,7 @@
 {{define "body"}}
 <h2>{{if .IsNew}}New target{{else}}Edit target{{end}}</h2>
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
-<form method="post" action="/admin/targets/save" class="form wide">
+<form method="post" action="/admin/targets/save" class="form wide"{{if not .IsNew}} data-autosave="/admin/targets/save"{{end}}>
 <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Target.ID}}">
 <div class="card" data-grok><h3>Grok bot preset</h3>
 <p>Paste the webhook line as <code>URL KEY</code>. <span class="gh-word">ghook</span> fills the URL and the bearer token.</p>
@@ -11,6 +11,9 @@
 <input id="target-name" name="name" required value="{{.Target.Name}}" placeholder="CFO"></div>
 <div class="field"><label for="target-url">URL</label>
 <input id="target-url" name="url" type="url" required value="{{.Target.URL}}" placeholder="https://bot.example.com/hook"></div>
+<div class="field"><label for="payload_pubkey">Payload public key</label>
+<input id="payload_pubkey" name="payload_pubkey" value="{{.Target.PayloadPubKey}}" placeholder="age1..." spellcheck="false" autocomplete="off">
+<p class="muted">Optional. An <code>age1</code> X25519 recipient. When set, <span class="gh-word">ghook</span> encrypts the outbound body and only the receiver who holds the private key can read it. Leave empty to send JSON in the clear to the webhook.</p></div>
 <div class="field"><label for="target-secret">Secret{{if .Target.HasSecret}} <span class="pill ok">saved</span>{{end}}</label>
 <input id="target-secret" type="password" name="secret" autocomplete="new-password" spellcheck="false" placeholder="{{if .Target.HasSecret}}Leave empty to keep the saved secret{{end}}"></div>
 <label class="check"><input type="checkbox" name="clear_secret" value="1"> Remove the saved secret</label>
@@ -40,8 +43,12 @@
 <div class="field"><label for="template">Payload template</label>
 <textarea id="template" name="template" class="wide" rows="6" placeholder="Leave empty for the default JSON.">{{.Target.Template}}</textarea>
 <p class="muted">Go template. Fields: Source, Route, Account, MessageID, ThreadID, From, To, Cc, Subject, Date, Labels, Category, Snippet, GmailURL, DeliveryID, Body, BodyText.</p></div>
-<div class="row"><button class="btn fill" type="submit">Save</button><a class="act" href="/admin/targets">Cancel</a>
-{{if .Target.ID}}<button class="act danger" type="submit" formaction="/admin/targets/delete" formnovalidate data-confirm="Delete this target?" data-confirm-danger="1">Delete</button>{{end}}
-</div>
+{{if .IsNew}}<div class="row"><button class="btn fill" type="submit">Create</button><a class="act" href="/admin/targets">Cancel</a></div>
+{{else}}<div class="row"><a class="act" href="/admin/targets">Back to targets</a></div>
+{{end}}
 </form>
+{{if .Target.ID}}<form method="post" action="/admin/targets/delete" data-confirm="Delete this target?" data-confirm-danger="1">
+<input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Target.ID}}">
+<div class="row"><button class="act danger" type="submit">Delete</button></div>
+</form>{{end}}
 {{end}}

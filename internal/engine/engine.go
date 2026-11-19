@@ -17,6 +17,7 @@ import (
 	"github.com/helv-io/ghook/internal/gmailx"
 	"github.com/helv-io/ghook/internal/mail"
 	"github.com/helv-io/ghook/internal/match"
+	"github.com/helv-io/ghook/internal/secrets"
 	"github.com/helv-io/ghook/internal/store"
 )
 
@@ -96,8 +97,8 @@ func (e *Engine) HandleNotification(ctx context.Context, raw []byte) error {
 	}
 	err = e.Sync(ctx, n.Email, n.History)
 	if errors.Is(err, ErrUnknownAccount) {
-		log.Printf("ghook: notification for %s ignored: mailbox is not connected", n.Email)
-		e.Feed.Add("sync", "Notification for "+n.Email+" ignored: mailbox is not connected")
+		log.Printf("ghook: notification for %s ignored: mailbox is not connected", redact(n.Email))
+		e.Feed.Add("sync", "Notification ignored: mailbox is not connected")
 		return nil
 	}
 	return err
@@ -169,7 +170,7 @@ func (e *Engine) Sync(ctx context.Context, email, notifyHistory string) error {
 			}
 			since := e.now().AddDate(0, 0, -days)
 			msgs, err = client.ListSince(ctx, since, 200)
-			e.Feed.Add("sync", email+": history id was too old, listed the last "+strconv.Itoa(days)+" days")
+			e.Feed.AddFor(acc.UserID, "sync", "History id was too old, listed the last "+strconv.Itoa(days)+" days")
 		}
 	}
 	if err != nil {
@@ -228,9 +229,9 @@ func (e *Engine) Sync(ctx context.Context, email, notifyHistory string) error {
 		}
 	}
 	if fallback {
-		e.Feed.Add("sync", fmt.Sprintf("%s: resynced %d message(s), %d new", email, len(msgs), inserted))
+		e.Feed.AddFor(acc.UserID, "sync", fmt.Sprintf("Resynced %d message(s), %d new", len(msgs), inserted))
 	} else if inserted > 0 {
-		e.Feed.Add("sync", fmt.Sprintf("%s: %d new message(s) queued", email, inserted))
+		e.Feed.AddFor(acc.UserID, "sync", fmt.Sprintf("%d new message(s) queued", inserted))
 	}
 	return nil
 }
@@ -330,7 +331,7 @@ func (e *Engine) applyLabels(ctx context.Context, client gmailx.Client, prefix s
 		if !ok {
 			created, err := client.CreateLabel(ctx, name)
 			if err != nil {
-				e.Feed.Add("error", "Could not create label "+name)
+				e.Feed.AddFor(e.uid(), "error", "Could not create label "+name)
 				continue
 			}
 			id = created.ID
@@ -342,7 +343,7 @@ func (e *Engine) applyLabels(ctx context.Context, client gmailx.Client, prefix s
 		return
 	}
 	if err := client.AddLabels(ctx, m.ID, ids); err != nil {
-		e.Feed.Add("error", "Could not label "+m.ID+": "+err.Error())
+		e.Feed.AddFor(e.uid(), "error", "Could not label a message")
 	}
 }
 
@@ -378,15 +379,15 @@ func (e *Engine) RenewWatches(ctx context.Context, topic string) {
 			log.Printf("ghook: save watch: %v", err)
 			continue
 		}
-		e.Feed.Add("watch", fmt.Sprintf("%s: watch renewed until %s", a.Email, until.UTC().Format(time.RFC3339)))
+		e.Feed.AddFor(a.UserID, "watch", "Watch renewed until "+until.UTC().Format(time.RFC3339))
 	}
 }
 
 func (e *Engine) failWatch(a store.Account, err error) {
 	msg := err.Error()
 	_ = e.DB.SetWatch(a.ID, a.WatchExpiry, "", msg)
-	e.Feed.Add("error", "Watch renewal failed for "+a.Email)
-	log.Printf("ghook: watch renewal failed for %s: %v", a.Email, err)
+	e.Feed.AddFor(a.UserID, "error", "Watch renewal failed")
+	log.Printf("ghook: watch renewal failed for %s: %v", redact(a.Email), err)
 	e.notifyWatch(a.Email, msg)
 }
 
@@ -437,8 +438,8 @@ func (e *Engine) CatchUp(ctx context.Context) {
 			continue
 		}
 		if err := e.Sync(ctx, a.Email, ""); err != nil {
-			log.Printf("ghook: catch-up %s: %v", a.Email, err)
-			e.Feed.Add("error", "Catch-up failed for "+a.Email)
+			log.Printf("ghook: catch-up %s: %v", redact(a.Email), err)
+			e.Feed.AddFor(a.UserID, "error", "Catch-up failed")
 		}
 	}
 }
@@ -550,4 +551,13 @@ func (e *Engine) limitPlans(plans []store.MatchPlan) []store.MatchPlan {
 		return plans
 	}
 	return plans[:left]
+}
+
+func redact(email string) string { return secrets.RedactEmail(email) }
+
+func (e *Engine) uid() int64 {
+	if e == nil || e.DB == nil {
+		return 0
+	}
+	return e.DB.UserID()
 }

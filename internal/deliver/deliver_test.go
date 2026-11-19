@@ -327,8 +327,44 @@ func TestNewDigestTargetDoesNotFireImmediately(t *testing.T) {
 	}
 }
 
+func TestRequestLogOmitsBodyByDefault(t *testing.T) {
+	db := openDB(t)
+	tg, err := db.SaveTarget(store.Target{Name: "bot", URL: "https://bot.example.com/hook"}, "super-secret-key", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acc, err := db.SaveAccount("ada@example.com", "r", "", 0, "", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := mail.Message{ID: "m-omit", ThreadID: "th", From: "Ada <ada@example.com>", Subject: "A <B> C",
+		Snippet: "hi", Date: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC), Labels: []string{"INBOX"}}
+	if _, err := db.QueueAndAdvance(acc.ID, acc.Email, msg, []store.MatchPlan{{
+		RouteKey: "route:1", RouteName: "inbox", TargetID: tg.ID, TargetName: tg.Name,
+	}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	dels, _ := db.Deliveries("", "", "", 5)
+	if len(dels) == 0 {
+		t.Fatal("no delivery")
+	}
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	due(t, db, now)
+	s := &script{}
+	w := &Worker{DB: db, HTTP: s, Now: func() time.Time { return now }}
+	w.Step(context.Background())
+	got, _, _ := db.DeliveryByID(dels[0].ID)
+	if !strings.Contains(got.RequestLog, "[body not stored]") {
+		t.Fatalf("expected body omitted, got %s", got.RequestLog)
+	}
+	if strings.Contains(got.RequestLog, "Ada <ada@example.com>") || strings.Contains(got.RequestLog, "A <B> C") {
+		t.Fatalf("request log stored a payload body: %s", got.RequestLog)
+	}
+}
+
 func TestRequestLogLeavesLessThanSign(t *testing.T) {
 	db := openDB(t)
+	_ = db.SetSetting("retain_bodies", "1")
 	tg, err := db.SaveTarget(store.Target{Name: "bot", URL: "https://bot.example.com/hook"}, "super-secret-key", false)
 	if err != nil {
 		t.Fatal(err)

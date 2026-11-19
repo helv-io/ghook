@@ -91,7 +91,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 
 **Account.** One Gmail mailbox with a `users.watch` on the topic. ghook stores the history id per mailbox and renews the watch before it expires (about 7 days).
 
-**Target.** A named webhook: a URL and a secret. Auth is Bearer (default), a named header, or HMAC (`X-Ghook-Signature`). Every POST also sends `X-Ghook-Delivery`. On the target form, paste `URL KEY` (one space) and use **Fill fields** for a Grok Bot webhook.
+**Target.** A named webhook: a URL and a secret. Auth is Bearer (default), a named header, or HMAC (`X-Ghook-Signature`). Every POST also sends `X-Ghook-Delivery`. On the target form, paste `URL KEY` (one space) and use **Fill fields** for a Grok Bot webhook. A target may also supply an `age1…` public key; ghook then encrypts the outbound body so only the holder of the matching secret can read it.
 
 **Route.** An ordered rule that matches mail and posts to one target. The first match wins unless the route says **continue**. A fallback runs only when nothing else matched, and its filter still applies. Use the simulator against recent mail before you rely on a rule.
 
@@ -134,11 +134,11 @@ Tick **include the plain-text body** on a target to add `body` and `body_text`. 
 
 ## Auth and accounts
 
-Sign-in is Google only. Anyone who completes Google sign-in gets their own account. There is no owner, invite list, or allowlist. Each user connects their own Gmail mailbox, and sees only their own routes, targets, deliveries, settings, and audit log. Target secrets and Google tokens are encrypted at rest with a key derived per user from the instance key.
+Sign-in is Google only. Anyone who completes Google sign-in gets their own account. There is no owner, invite list, or allowlist. Each user connects their own Gmail mailbox, and sees only their own routes, targets, deliveries, settings, and audit log.
 
 The Google OAuth client and the Pub/Sub topic are instance-wide, set by the operator through the environment. Users do not paste credentials.
 
-From the **account** page a user can sign out, or delete their account and data: ghook stops the Gmail watch, revokes the Google token, and deletes that user's rows.
+From the **account** page a user can sign out, or delete their account and data: ghook stops the Gmail watch, revokes the Google token, destroys that user's data key (so leftover ciphertext cannot be opened), and deletes the rows.
 
 Per-user defaults: 25 targets, 50 routes, and 1000 deliveries per UTC day (`MAX_TARGETS`, `MAX_ROUTES`, `MAX_DELIVERIES_PER_DAY`).
 
@@ -152,6 +152,22 @@ Public paths served by the app, with no session:
 
 `/metrics` is not public. Set `METRICS_TOKEN` and call it with `Authorization: Bearer <token>`. If the token is unset, `/metrics` returns 404. The text is aggregate only: queue counts, user count, active watches. It does not include account emails.
 
+## Data protection
+
+ghook has to process mail in memory to decide which webhook to call. That is not end-to-end encryption. A future option is to run the process in a confidential VM; this version does not.
+
+What the operator of an instance can and cannot see:
+
+- Login and mailbox addresses are stored in the clear. They are the lookup key for the shared Pub/Sub `emailAddress`.
+- Delivery logs store metadata (message id, route, target, status, timing). Message bodies and snippets are not written unless you turn body retention on, and even then they are encrypted and purged after the retention window.
+- Google tokens, target secrets, any stored payloads, and route match fields are encrypted at rest with a per-user data key (DEK). That DEK is itself wrapped by the instance key (`SECRETS_KEY`, or `/data/secrets.key` if you leave `SECRETS_KEY` empty).
+- An operator who has both the database and the instance key can decrypt those fields. A copy of the database file without the instance key cannot.
+- If a target has an `age1…` public key, the webhook body is encrypted so that only the receiver can read it. ghook still sees the plaintext in memory before it encrypts the POST.
+- Logs redact email addresses and never print secrets. Metrics never include emails.
+- Deleting an account shreds the per-user key first, then deletes the rows.
+
+`ghook keys rotate --user ada@example.com` (or `--all`) mints a new data key and re-seals that user's secrets. `ghook keys rotate-kek` re-wraps every data key and swaps the key file. It only works with a key file (`SECRETS_KEY` must be unset). The previous file is kept as `secrets.key.bak`. Neither command prints key material.
+
 ## Environment
 
 Required to boot a typical deploy. Routes, targets and retention still live in the database, per user.
@@ -162,9 +178,9 @@ Required to boot a typical deploy. Routes, targets and retention still live in t
 | `GOOGLE_CLIENT_FILE` or `GOOGLE_CLIENT_JSON` | Web OAuth client JSON. |
 | `PUBSUB_SA_FILE` or `PUBSUB_SA_JSON` | Service account that can pull the shared subscription. |
 
-Defaults: `LISTEN_ADDR=:8080`, `DB_PATH=/data/ghook.db`, topic `gmail-inbox`, subscription `ghook-pull`. `PUBSUB_PROJECT` is read from the service account JSON when unset. If `SECRETS_KEY` is empty, `/data/secrets.key` is created on first start. Optional variables are in [AGENT.md](AGENT.md) and `.env.example`.
+Defaults: `LISTEN_ADDR=:8080`, `DB_PATH=/data/ghook.db`, topic `gmail-inbox`, subscription `ghook-pull`. `PUBSUB_PROJECT` is read from the service account JSON when unset. If `SECRETS_KEY` is empty, `/data/secrets.key` is created on first start. That file is the instance key that wraps every per-user data key; prefer the file over `SECRETS_KEY` if you want to run `ghook keys rotate-kek`. Optional variables are in [AGENT.md](AGENT.md) and `.env.example`.
 
-This version needs a fresh database. Opening a pre-0.1.3 file (workspace-era schema) returns an error asking you to back up and replace it.
+A v0.1.3 database is opened and migrated in place. Do not replace the data directory when upgrading from 0.1.3 to 0.1.4. Opening a pre-0.1.3 file (workspace-era schema) still returns an error asking you to back up and replace it.
 
 ## Operations
 
@@ -174,7 +190,7 @@ This version needs a fresh database. Opening a pre-0.1.3 file (workspace-era sch
 | `/metrics` | Prometheus text: queue depth, dead letters, user count, active watches. Requires `METRICS_TOKEN`. Aggregate only; no account emails. |
 | `/hooks/pubsub` | Optional push receiver. JWT required. |
 
-**Backup** is a copy of `/data`. You need both `ghook.db` and `secrets.key` (or the `SECRETS_KEY` you set). One without the other cannot open the tokens. To upgrade, copy `./data` somewhere safe, then `docker compose pull && docker compose up -d`.
+**Backup** is a copy of `/data`. You need both `ghook.db` and `secrets.key` (or the `SECRETS_KEY` you set). One without the other cannot open tokens or sealed payloads. To upgrade, copy `./data` somewhere safe, then `docker compose pull && docker compose up -d`.
 
 The CLI talks to the same database:
 
@@ -185,6 +201,9 @@ ghook export --user ada@example.com --passphrase 'correct horse' > ghook.yaml
 ghook import --user ada@example.com ghook.yaml --passphrase 'correct horse'
 ghook replay --user ada@example.com --id 12
 ghook replay --user ada@example.com --route primary --since 2026-04-01
+ghook keys rotate --user ada@example.com
+ghook keys rotate --all
+ghook keys rotate-kek
 ```
 
 Export omits secrets unless you set a passphrase, which seals them in the file. Import matches on name. A blank secret does not wipe a stored one. **Retry** in the UI keeps the delivery id. **Replay** (UI or CLI) mints a new one.

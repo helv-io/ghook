@@ -21,12 +21,16 @@ import (
 	"golang.org/x/crypto/scrypt"
 )
 
-const prefix = "enc:v1:"
+const (
+	prefix   = "enc:v1:"
+	prefixV2 = "enc:v2:"
+)
 
 // Box seals and opens values with one key.
 type Box struct {
-	aead cipher.AEAD
-	key  []byte
+	aead   cipher.AEAD
+	key    []byte
+	prefix string
 }
 
 // New builds a Box from a 32-byte key.
@@ -44,7 +48,16 @@ func New(key []byte) (*Box, error) {
 	}
 	k := make([]byte, 32)
 	copy(k, key)
-	return &Box{aead: a, key: k}, nil
+	return &Box{aead: a, key: k, prefix: prefix}, nil
+}
+
+func newWithPrefix(key []byte, pfx string) (*Box, error) {
+	b, err := New(key)
+	if err != nil {
+		return nil, err
+	}
+	b.prefix = pfx
+	return b, nil
 }
 
 // Derive returns a box whose key is bound to one user. A secret sealed
@@ -140,7 +153,13 @@ func LoadOrCreate(envKey, keyFile string) (*Box, string, error) {
 }
 
 // IsSealed reports whether s is in the sealed form.
-func IsSealed(s string) bool { return strings.HasPrefix(s, prefix) }
+func IsSealed(s string) bool {
+	return strings.HasPrefix(s, prefix) || strings.HasPrefix(s, prefixV2)
+}
+
+// IsV1 / IsV2 distinguish envelope versions.
+func IsV1(s string) bool { return strings.HasPrefix(s, prefix) }
+func IsV2(s string) bool { return strings.HasPrefix(s, prefixV2) }
 
 // Seal encrypts plain. The empty string stays empty.
 func (b *Box) Seal(plain string) string {
@@ -149,21 +168,31 @@ func (b *Box) Seal(plain string) string {
 	}
 	nonce := make([]byte, b.aead.NonceSize())
 	_, _ = rand.Read(nonce)
+	pfx := b.prefix
+	if pfx == "" {
+		pfx = prefix
+	}
 	ct := b.aead.Seal(nonce, nonce, []byte(plain), nil)
-	return prefix + base64.RawURLEncoding.EncodeToString(ct)
+	return pfx + base64.RawURLEncoding.EncodeToString(ct)
 }
 
 // Open decrypts a sealed value. A value without the prefix is returned unchanged
 // so a row written before sealing still opens. A sealed value that fails
 // authentication is an error.
 func (b *Box) Open(s string) (string, error) {
-	if !strings.HasPrefix(s, prefix) {
+	var pfx string
+	switch {
+	case strings.HasPrefix(s, prefixV2):
+		pfx = prefixV2
+	case strings.HasPrefix(s, prefix):
+		pfx = prefix
+	default:
 		return s, nil
 	}
 	if b == nil {
 		return "", errors.New("secrets: no key")
 	}
-	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(s, prefix))
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(s, pfx))
 	ns := b.aead.NonceSize()
 	if err != nil || len(raw) < ns+b.aead.Overhead() {
 		return "", errors.New("secrets: malformed value")
@@ -173,4 +202,14 @@ func (b *Box) Open(s string) (string, error) {
 		return "", errors.New("secrets: cannot decrypt (wrong SECRETS_KEY or key file?)")
 	}
 	return string(pt), nil
+}
+
+// Key returns a copy of the 32-byte key. Callers must not log it.
+func (b *Box) Key() []byte {
+	if b == nil {
+		return nil
+	}
+	k := make([]byte, len(b.key))
+	copy(k, b.key)
+	return k
 }

@@ -32,7 +32,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, p page) {
 	counts, _ := s.db(r).DeliveryCounts()
 	p.RouteStats, _ = s.db(r).RouteStats()
 	p.TargetStats, _ = s.db(r).TargetStats()
-	p.Events = s.RT.Feed.Backlog()
+	p.Events = s.RT.Feed.BacklogFor(s.db(r).UserID())
 	connected := false
 	var soon int64
 	var last int64
@@ -241,13 +241,13 @@ func (s *Server) renewOne(w http.ResponseWriter, r *http.Request, p page) {
 	hist, exp, err := c.Watch(r.Context(), pubsubx.TopicPath(s.RT.Cfg.PubSubProject, s.RT.Cfg.PubSubTopic))
 	if err != nil {
 		_ = s.db(r).SetWatch(acc.ID, acc.WatchExpiry, "", safeErr(err))
-		s.RT.Feed.Add("error", "Watch renewal failed for "+acc.Email)
+		s.RT.Feed.AddFor(acc.UserID, "error", "Watch renewal failed")
 		s.redirect(w, r, "/admin/accounts", "bad", "Watch renewal failed.")
 		return
 	}
 	_ = s.db(r).SetWatch(acc.ID, exp.Unix(), hist, "")
 	s.db(r).Audit(p.User, "watch.renew", acc.Email)
-	s.RT.Feed.Add("watch", acc.Email+" watch renewed")
+	s.RT.Feed.AddFor(acc.UserID, "watch", "Watch renewed")
 	s.redirect(w, r, "/admin/accounts", "ok", "Watch renewed for "+acc.Email+".")
 }
 

@@ -37,6 +37,8 @@ func main() {
 			os.Exit(importCmd(os.Args[2:]))
 		case "replay":
 			os.Exit(replayCmd(os.Args[2:]))
+		case "keys":
+			os.Exit(keysCmd(os.Args[2:]))
 		case "-h", "--help", "help":
 			usage()
 			return
@@ -55,6 +57,8 @@ func usage() {
   ghook export          write routes and targets as YAML (secrets omitted)
   ghook import FILE     load that YAML
   ghook replay          re-queue deliveries
+  ghook keys rotate     mint a new per-user data key and re-seal secrets
+  ghook keys rotate-kek re-wrap every data key with a new instance KEK
 
 Environment: PUBLIC_URL, LISTEN_ADDR, DB_PATH, GOOGLE_CLIENT_FILE or GOOGLE_CLIENT_JSON,
 PUBSUB_PROJECT, PUBSUB_TOPIC (default gmail-inbox), PUBSUB_SUBSCRIPTION (default ghook-pull),

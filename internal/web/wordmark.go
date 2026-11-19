@@ -29,6 +29,9 @@ func pathcode(s string) template.HTML {
 	if s == "" {
 		return ""
 	}
-	esc := strings.ReplaceAll(html.EscapeString(s), "/", "/<wbr>")
-	return template.HTML(`<code class="path">` + esc + `</code>`)
+	parts := strings.Split(html.EscapeString(s), "/")
+	for i, part := range parts {
+		parts[i] = `<span class="path-seg">` + part + `</span>`
+	}
+	return template.HTML(`<code class="path">` + strings.Join(parts, `/<wbr>`) + `</code>`)
 }

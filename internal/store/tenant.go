@@ -187,6 +187,11 @@ func (d *DB) DeleteUserData(userID int64) error {
 		return err
 	}
 	defer tx.Rollback()
+	// Destroy the DEK first so leftover ciphertext is unreadable if the
+	// rest of the transaction is interrupted after a later statement.
+	if _, err := tx.Exec(`DELETE FROM user_keys WHERE user_id=?`, userID); err != nil {
+		return err
+	}
 	for _, q := range []string{
 		`DELETE FROM deliveries WHERE user_id=?`,
 		`DELETE FROM messages WHERE user_id=?`,
@@ -211,14 +216,24 @@ func (d *DB) AccountsByEmail(email string) ([]Account, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	var out []Account
 	for rows.Next() {
 		a, err := scanAccount(rows)
 		if err != nil {
+			rows.Close()
 			return nil, err
 		}
 		out = append(out, a)
 	}
-	return out, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	// Use queries user_keys; the DB has MaxOpenConns(1), so the
+	// account rows must be closed first or this deadlocks.
+	for i := range out {
+		out[i] = d.Use(out[i].UserID).openAccount(out[i])
+	}
+	return out, nil
 }

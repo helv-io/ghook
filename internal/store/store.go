@@ -50,14 +50,20 @@ func Open(path, secretsKey, keyFile string) (*DB, error) {
 	return d, nil
 }
 
-// Use returns a handle scoped to one user. Secrets are sealed with the
-// key derived for that user.
+// Use returns a handle scoped to one user. Secrets are sealed with that
+// user's DEK (created and wrapped by the instance KEK on first use).
+// Use queries the database, so do not call it while holding open Rows
+// (SQLite is limited to one connection).
 func (d *DB) Use(id int64) *DB {
 	cp := *d
 	cp.uid = id
 	cp.all = false
 	if d.root != nil && id != 0 {
-		cp.Box = d.root.Derive(id)
+		if box, err := d.ensureUserBox(id); err == nil {
+			cp.Box = box
+		} else {
+			cp.Box = d.root.Derive(id)
+		}
 	}
 	return &cp
 }
@@ -332,7 +338,7 @@ func (d *DB) AccountByID(id int64) (Account, bool, error) {
 
 func (d *DB) openAccount(a Account) Account {
 	if a.refresh != "" {
-		if p, err := d.Box.Open(a.refresh); err == nil {
+		if p, err := d.openSealed(a.refresh); err == nil {
 			a.refresh = p
 		} else {
 			a.refresh = ""
@@ -340,7 +346,7 @@ func (d *DB) openAccount(a Account) Account {
 		}
 	}
 	if a.access != "" {
-		if p, err := d.Box.Open(a.access); err == nil {
+		if p, err := d.openSealed(a.access); err == nil {
 			a.access = p
 		} else {
 			a.access = ""
@@ -420,22 +426,23 @@ func (d *DB) TouchNotify(id int64, history string) error {
 
 // Target is a webhook endpoint. Secret is never populated for the UI; HasSecret says if one is stored.
 type Target struct {
-	ID          int64
-	Name        string
-	URL         string
-	AuthMode    string
-	AuthHeader  string
-	Template    string
-	IncludeBody bool
-	Paused      bool
-	QuietStart  string
-	QuietEnd    string
-	DigestAt    string
-	RatePerMin  int
-	LastDigest  int64
-	HasSecret   bool
-	UserID      int64
-	secret      string
+	ID            int64
+	Name          string
+	URL           string
+	AuthMode      string
+	AuthHeader    string
+	Template      string
+	IncludeBody   bool
+	Paused        bool
+	QuietStart    string
+	QuietEnd      string
+	DigestAt      string
+	RatePerMin    int
+	LastDigest    int64
+	HasSecret     bool
+	PayloadPubKey string
+	UserID        int64
+	secret        string
 }
 
 // Secret opens the webhook secret.
@@ -446,28 +453,40 @@ func scanTarget(sc interface{ Scan(...any) error }, box *secrets.Box, open bool)
 	var body, paused int
 	var secret string
 	err := sc.Scan(&t.ID, &t.Name, &t.URL, &secret, &t.AuthMode, &t.AuthHeader, &t.Template,
-		&body, &paused, &t.QuietStart, &t.QuietEnd, &t.DigestAt, &t.RatePerMin, &t.LastDigest, &t.UserID)
+		&body, &paused, &t.QuietStart, &t.QuietEnd, &t.DigestAt, &t.RatePerMin, &t.LastDigest, &t.UserID, &t.PayloadPubKey)
 	if err != nil {
 		return t, err
 	}
 	t.IncludeBody = body == 1
 	t.Paused = paused == 1
 	t.HasSecret = secret != ""
-	if open && secret != "" && box != nil {
-		p, err := box.Open(secret)
-		if err != nil {
-			return t, err
-		}
-		t.secret = p
-	}
+	t.secret = secret
 	if t.AuthMode == "" {
 		t.AuthMode = "bearer"
 	}
 	return t, nil
 }
 
+func (d *DB) revealTarget(t Target, openSecret bool) (Target, error) {
+	if t.secret == "" {
+		t.HasSecret = false
+		return t, nil
+	}
+	t.HasSecret = true
+	if !openSecret {
+		t.secret = ""
+		return t, nil
+	}
+	p, err := d.openSealed(t.secret)
+	if err != nil {
+		return t, err
+	}
+	t.secret = p
+	return t, nil
+}
+
 const targetCols = `id, name, url, secret, auth_mode, auth_header, payload_template, include_body, paused,
-	quiet_start, quiet_end, digest_at, rate_per_minute, last_digest, user_id`
+	quiet_start, quiet_end, digest_at, rate_per_minute, last_digest, user_id, payload_pubkey`
 
 // Targets lists endpoints. Secrets stay sealed.
 func (d *DB) Targets() ([]Target, error) {
@@ -480,6 +499,10 @@ func (d *DB) Targets() ([]Target, error) {
 	var out []Target
 	for rows.Next() {
 		t, err := scanTarget(rows, nil, false)
+		if err != nil {
+			return nil, err
+		}
+		t, err = d.revealTarget(t, false)
 		if err != nil {
 			return nil, err
 		}
@@ -497,10 +520,14 @@ func (d *DB) TargetByID(id int64, openSecret bool) (Target, bool, error) {
 		args = append(args, d.uid)
 	}
 	row := d.SQL.QueryRow(q, args...)
-	t, err := scanTarget(row, d.Box, openSecret)
+	t, err := scanTarget(row, nil, false)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Target{}, false, nil
 	}
+	if err != nil {
+		return Target{}, false, err
+	}
+	t, err = d.revealTarget(t, openSecret)
 	if err != nil {
 		return Target{}, false, err
 	}
@@ -510,10 +537,14 @@ func (d *DB) TargetByID(id int64, openSecret bool) (Target, bool, error) {
 // TargetByName loads one endpoint by its unique name.
 func (d *DB) TargetByName(name string, openSecret bool) (Target, bool, error) {
 	row := d.SQL.QueryRow(`SELECT `+targetCols+` FROM targets WHERE lower(name)=lower(?) AND user_id=?`, strings.TrimSpace(name), d.uid)
-	t, err := scanTarget(row, d.Box, openSecret)
+	t, err := scanTarget(row, nil, false)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Target{}, false, nil
 	}
+	if err != nil {
+		return Target{}, false, err
+	}
+	t, err = d.revealTarget(t, openSecret)
 	if err != nil {
 		return Target{}, false, err
 	}
@@ -525,8 +556,14 @@ func (d *DB) TargetByName(name string, openSecret bool) (Target, bool, error) {
 func (d *DB) SaveTarget(t Target, secret string, clearSecret bool) (Target, error) {
 	t.Name = strings.TrimSpace(t.Name)
 	t.URL = strings.TrimSpace(t.URL)
+	t.PayloadPubKey = strings.TrimSpace(t.PayloadPubKey)
 	if t.AuthMode != "header" && t.AuthMode != "hmac" {
 		t.AuthMode = "bearer"
+	}
+	if t.PayloadPubKey != "" {
+		if err := ValidatePayloadPubKey(t.PayloadPubKey); err != nil {
+			return Target{}, err
+		}
 	}
 	cur, ok, err := d.TargetByName(t.Name, true)
 	if err != nil {
@@ -561,15 +598,13 @@ func (d *DB) SaveTarget(t Target, secret string, clearSecret bool) (Target, erro
 	if !ok || (t.ID == 0 && !ok) {
 		lastDigest := t.LastDigest
 		if strings.TrimSpace(t.DigestAt) != "" && lastDigest == 0 {
-			// Stamp now so a newly created digest does not fire for a time
-			// that has already passed today.
 			lastDigest = ts
 		}
 		res, err := d.SQL.Exec(`INSERT INTO targets(user_id, name, url, secret, auth_mode, auth_header, payload_template,
-			include_body, paused, quiet_start, quiet_end, digest_at, rate_per_minute, last_digest, created_at, updated_at)
-			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			include_body, paused, quiet_start, quiet_end, digest_at, rate_per_minute, last_digest, payload_pubkey, created_at, updated_at)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			d.uid, t.Name, t.URL, stored, t.AuthMode, strings.TrimSpace(t.AuthHeader), t.Template,
-			body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, lastDigest, ts, ts)
+			body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, lastDigest, t.PayloadPubKey, ts, ts)
 		if err != nil {
 			return Target{}, err
 		}
@@ -586,9 +621,9 @@ func (d *DB) SaveTarget(t Target, secret string, clearSecret bool) (Target, erro
 		lastDigest = ts
 	}
 	_, err = d.SQL.Exec(`UPDATE targets SET name=?, url=?, secret=?, auth_mode=?, auth_header=?, payload_template=?,
-		include_body=?, paused=?, quiet_start=?, quiet_end=?, digest_at=?, rate_per_minute=?, last_digest=?, updated_at=? WHERE id=? AND user_id=?`,
+		include_body=?, paused=?, quiet_start=?, quiet_end=?, digest_at=?, rate_per_minute=?, last_digest=?, payload_pubkey=?, updated_at=? WHERE id=? AND user_id=?`,
 		t.Name, t.URL, stored, t.AuthMode, strings.TrimSpace(t.AuthHeader), t.Template,
-		body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, lastDigest, ts, id, d.uid)
+		body, paused, t.QuietStart, t.QuietEnd, t.DigestAt, t.RatePerMin, lastDigest, t.PayloadPubKey, ts, id, d.uid)
 	if err != nil {
 		return Target{}, err
 	}
@@ -670,6 +705,10 @@ func (d *DB) Routes() ([]Route, error) {
 		if err != nil {
 			return nil, err
 		}
+		rt, err = d.revealRoute(rt)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, rt)
 	}
 	return out, rows.Err()
@@ -683,6 +722,20 @@ func scanRoute(sc interface{ Scan(...any) error }) (Route, error) {
 	}
 	r.Enabled, r.Fallback, r.Continue, r.ApplyLabel = en == 1, fb == 1, cont == 1, apply == 1
 	_ = json.Unmarshal([]byte(r.MatchJSON), &r.Spec)
+	r.Spec = r.Spec.Normalize()
+	return r, nil
+}
+
+func (d *DB) revealRoute(r Route) (Route, error) {
+	if r.MatchJSON == "" {
+		return r, nil
+	}
+	plain, err := d.openSealed(r.MatchJSON)
+	if err != nil {
+		return r, err
+	}
+	r.MatchJSON = plain
+	_ = json.Unmarshal([]byte(plain), &r.Spec)
 	r.Spec = r.Spec.Normalize()
 	return r, nil
 }
@@ -702,6 +755,10 @@ func (d *DB) RouteByID(id int64) (Route, bool, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return Route{}, false, nil
 	}
+	if err != nil {
+		return Route{}, false, err
+	}
+	r, err = d.revealRoute(r)
 	if err != nil {
 		return Route{}, false, err
 	}
@@ -733,7 +790,7 @@ func (d *DB) SaveRoute(r Route) (Route, error) {
 		}
 		res, err := d.SQL.Exec(`INSERT INTO routes(user_id, name, position, enabled, fallback, cont, target_id, match_json, apply_label, created_at, updated_at)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			d.uid, strings.TrimSpace(r.Name), r.Position, b(r.Enabled), b(r.Fallback), b(r.Continue), r.TargetID, string(raw), b(r.ApplyLabel), ts, ts)
+			d.uid, strings.TrimSpace(r.Name), r.Position, b(r.Enabled), b(r.Fallback), b(r.Continue), r.TargetID, d.Box.Seal(string(raw)), b(r.ApplyLabel), ts, ts)
 		if err != nil {
 			return Route{}, err
 		}
@@ -742,7 +799,7 @@ func (d *DB) SaveRoute(r Route) (Route, error) {
 		return out, err
 	}
 	_, err = d.SQL.Exec(`UPDATE routes SET name=?, enabled=?, fallback=?, cont=?, target_id=?, match_json=?, apply_label=?, updated_at=? WHERE id=? AND user_id=?`,
-		strings.TrimSpace(r.Name), b(r.Enabled), b(r.Fallback), b(r.Continue), r.TargetID, string(raw), b(r.ApplyLabel), ts, r.ID, d.uid)
+		strings.TrimSpace(r.Name), b(r.Enabled), b(r.Fallback), b(r.Continue), r.TargetID, d.Box.Seal(string(raw)), b(r.ApplyLabel), ts, r.ID, d.uid)
 	if err != nil {
 		return Route{}, err
 	}
@@ -876,7 +933,7 @@ func (d *DB) QueueAndAdvance(accountID int64, accountEmail string, msg mail.Mess
 		thread_id=excluded.thread_id, history_id=excluded.history_id, from_addr=excluded.from_addr,
 		to_addr=excluded.to_addr, cc_addr=excluded.cc_addr, subject=excluded.subject, snippet=excluded.snippet,
 		date_ms=excluded.date_ms, labels=excluded.labels, category=excluded.category, has_attachment=excluded.has_attachment`,
-		d.uid, accountID, msg.ID, msg.ThreadID, msg.HistoryID, msg.From, msg.To, msg.Cc, msg.Subject, msg.Snippet,
+		d.uid, accountID, msg.ID, msg.ThreadID, msg.HistoryID, msg.From, msg.To, msg.Cc, msg.Subject, "",
 		dateMS, string(labels), msg.Category, att, ts)
 	if err != nil {
 		return 0, err
@@ -1011,8 +1068,12 @@ func (d *DB) DueDeliveries(nowUnix int64, limit int) ([]Delivery, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return collectDel(rows)
+	out, err := collectDel(rows)
+	if err != nil {
+		return nil, err
+	}
+	d.revealDeliveries(out)
+	return out, nil
 }
 
 // DigestCandidates returns queued rows for one target.
@@ -1031,8 +1092,12 @@ func (d *DB) DigestCandidates(targetID int64, limit int) ([]Delivery, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return collectDel(rows)
+	out, err := collectDel(rows)
+	if err != nil {
+		return nil, err
+	}
+	d.revealDeliveries(out)
+	return out, nil
 }
 
 func collectDel(rows *sql.Rows) ([]Delivery, error) {
@@ -1124,6 +1189,7 @@ func (d *DB) DeliveryByID(id int64) (Delivery, bool, error) {
 	}
 	rows := []Delivery{del}
 	fillMessageMeta(d, rows)
+	d.revealDeliveries(rows)
 	return rows[0], true, nil
 }
 
@@ -1161,6 +1227,7 @@ func (d *DB) Deliveries(status, route, target string, limit int) ([]Delivery, er
 		return nil, err
 	}
 	fillMessageMeta(d, out)
+	d.revealDeliveries(out)
 	return out, nil
 }
 
@@ -1190,10 +1257,62 @@ func (d *DB) Finish(id int64, status string, attempts int, next int64, lastErr, 
 		sent = now()
 	}
 	clause, args := d.idClause(id)
+	if !d.BoolSetting("retain_bodies", false) {
+		reqLog = stripBody(reqLog)
+		respBody = ""
+	} else {
+		reqLog = d.sealPlain(reqLog)
+		respBody = d.sealPlain(respBody)
+	}
 	_, err := d.SQL.Exec(`UPDATE deliveries SET status=?, attempts=?, next_attempt=?, last_error=?, request_log=?,
 		response_status=?, response_body=?, updated_at=?, sent_at=CASE WHEN ?>0 THEN ? ELSE sent_at END WHERE `+clause,
 		append([]any{status, attempts, next, lastErr, reqLog, respStatus, respBody, now(), sent, sent}, args...)...)
 	return err
+}
+
+func (d *DB) sealPlain(s string) string {
+	if s == "" || d.Box == nil || secrets.IsSealed(s) {
+		return s
+	}
+	return d.Box.Seal(s)
+}
+
+func (d *DB) revealDelivery(del Delivery) Delivery {
+	uid := del.UserID
+	if uid == 0 {
+		uid = d.uid
+	}
+	scoped := d
+	if uid != 0 && d.uid != uid {
+		scoped = d.Use(uid)
+	}
+	if p, err := scoped.openSealed(del.PayloadJSON); err == nil {
+		del.PayloadJSON = p
+	}
+	if p, err := scoped.openSealed(del.RequestLog); err == nil {
+		del.RequestLog = p
+	}
+	if p, err := scoped.openSealed(del.ResponseBody); err == nil {
+		del.ResponseBody = p
+	}
+	return del
+}
+
+func (d *DB) revealDeliveries(dels []Delivery) {
+	for i := range dels {
+		dels[i] = d.revealDelivery(dels[i])
+	}
+}
+
+func stripBody(reqLog string) string {
+	// Keep the request line and headers; drop any body after the blank line.
+	if i := strings.Index(reqLog, "\n\n"); i >= 0 {
+		return reqLog[:i+2] + "[body not stored]"
+	}
+	if i := strings.Index(reqLog, "\r\n\r\n"); i >= 0 {
+		return reqLog[:i+4] + "[body not stored]"
+	}
+	return reqLog
 }
 
 // InsertDelivery inserts a row that is not a matched Gmail route (a test or a notification).
@@ -1211,13 +1330,23 @@ func (d *DB) InsertDelivery(del Delivery) (int64, error) {
 	if del.NextAttempt == 0 {
 		del.NextAttempt = ts
 	}
+	payload := del.PayloadJSON
+	if d.BoolSetting("retain_bodies", false) {
+		payload = d.sealPlain(payload)
+		del.RequestLog = d.sealPlain(del.RequestLog)
+		del.ResponseBody = d.sealPlain(del.ResponseBody)
+	} else {
+		payload = ""
+		del.ResponseBody = ""
+		del.RequestLog = stripBody(del.RequestLog)
+	}
 	res, err := d.SQL.Exec(`INSERT INTO deliveries(user_id, delivery_key, account_id, account_email, gmail_id, thread_id,
 		route_key, route_name, target_id, target_name, kind, status, attempts, next_attempt, last_error,
 		request_log, response_status, response_body, payload_json, created_at, updated_at, sent_at)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		d.uid, del.Key, del.AccountID, del.AccountEmail, del.GmailID, del.ThreadID, del.RouteKey, del.RouteName,
 		del.TargetID, del.TargetName, del.Kind, del.Status, del.Attempts, del.NextAttempt, del.LastError,
-		del.RequestLog, del.ResponseStatus, del.ResponseBody, del.PayloadJSON, ts, ts, del.SentAt)
+		del.RequestLog, del.ResponseStatus, del.ResponseBody, payload, ts, ts, del.SentAt)
 	if err != nil {
 		return 0, err
 	}
@@ -1410,7 +1539,31 @@ func (d *DB) Purge(before int64) (int, error) {
 		audArgs = append(audArgs, d.uid)
 	}
 	_, _ = d.SQL.Exec(aud, audArgs...)
+	n += int64(d.purgeBodies(before))
 	return int(n + m), nil
+}
+
+// purgeBodies strips stored payloads and snippets. Metadata rows remain until Purge.
+func (d *DB) purgeBodies(before int64) int {
+	where := ""
+	args := []any{before}
+	if !d.all {
+		where = ` AND user_id=?`
+		args = append(args, d.uid)
+	}
+	res, err := d.SQL.Exec(`UPDATE deliveries SET payload_json='', request_log=CASE WHEN request_log!='' THEN '[body not stored]' ELSE request_log END, response_body='' WHERE created_at<?`+where, args...)
+	if err != nil {
+		return 0
+	}
+	n, _ := res.RowsAffected()
+	msgArgs := []any{before}
+	msgWhere := ""
+	if !d.all {
+		msgWhere = ` AND user_id=?`
+		msgArgs = append(msgArgs, d.uid)
+	}
+	_, _ = d.SQL.Exec(`UPDATE messages SET snippet='' WHERE created_at<?`+msgWhere, msgArgs...)
+	return int(n)
 }
 
 // MessageForDelivery loads stored metadata for a gmail id.

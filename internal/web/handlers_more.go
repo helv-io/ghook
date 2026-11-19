@@ -135,20 +135,41 @@ func routeFrom(r *http.Request) (store.Route, error) {
 func (s *Server) routeSave(w http.ResponseWriter, r *http.Request, p page) {
 	rt, err := routeFrom(r)
 	if err != nil {
+		if wantsJSON(r) {
+			writeSaveErr(w, err.Error(), fieldFor(err.Error()))
+			return
+		}
 		s.routeForm(w, r, p, rt, err.Error(), nil)
 		return
 	}
 	if rt.ID == 0 && s.db(r).RouteCount() >= s.RT.Cfg.MaxRoutes {
-		s.routeForm(w, r, p, rt, store.ErrQuota{Kind: "routes", Max: s.RT.Cfg.MaxRoutes}.Error(), nil)
+		msg := store.ErrQuota{Kind: "routes", Max: s.RT.Cfg.MaxRoutes}.Error()
+		if wantsJSON(r) {
+			writeSaveErr(w, msg, "")
+			return
+		}
+		s.routeForm(w, r, p, rt, msg, nil)
 		return
 	}
 	saved, err := s.db(r).SaveRoute(rt)
 	if err != nil {
+		if wantsJSON(r) {
+			writeSaveErr(w, safeErr(err), fieldFor(safeErr(err)))
+			return
+		}
 		s.routeForm(w, r, p, rt, safeErr(err), nil)
 		return
 	}
 	s.db(r).Audit(p.User, "route.save", saved.Name)
-	s.redirect(w, r, "/admin/routes", "ok", "Route saved.")
+	if wantsJSON(r) {
+		writeSaveOK(w)
+		return
+	}
+	msg := "Route saved."
+	if rt.ID == 0 {
+		msg = "Route created."
+	}
+	s.redirect(w, r, "/admin/routes", "ok", msg)
 }
 
 func (s *Server) routeForm(w http.ResponseWriter, r *http.Request, p page, rt store.Route, err string, prev []engine.Preview) {
@@ -315,38 +336,45 @@ func (s *Server) targetSave(w http.ResponseWriter, r *http.Request, p page) {
 		QuietStart: r.FormValue("quiet_start"), QuietEnd: r.FormValue("quiet_end"),
 		DigestAt: r.FormValue("digest_at"), RatePerMin: atoi(r.FormValue("rate_per_minute")),
 	}
-	if strings.TrimSpace(t.Name) == "" || strings.TrimSpace(t.URL) == "" {
-		p.Err = "A target needs a name and a URL."
+	fail := func(msg, field string) {
+		if wantsJSON(r) {
+			writeSaveErr(w, msg, field)
+			return
+		}
+		p.Err = msg
 		p.Target = t
 		p.IsNew = id == 0
 		p.Title, p.Nav = "target", "targets"
 		s.render(w, "target_edit", p)
+	}
+	if strings.TrimSpace(t.Name) == "" || strings.TrimSpace(t.URL) == "" {
+		fail("A target needs a name and a URL.", "name")
 		return
 	}
 	if !strings.HasPrefix(t.URL, "https://") && !strings.HasPrefix(t.URL, "http://") {
-		p.Err = "The URL must be http or https."
-		p.Target = t
-		p.Title, p.Nav = "target", "targets"
-		s.render(w, "target_edit", p)
+		fail("The URL must be http or https.", "url")
 		return
 	}
 	if t.ID == 0 && s.db(r).TargetCount() >= s.RT.Cfg.MaxTargets {
-		p.Err = store.ErrQuota{Kind: "targets", Max: s.RT.Cfg.MaxTargets}.Error()
-		p.Target = t
-		p.Title, p.Nav = "target", "targets"
-		s.render(w, "target_edit", p)
+		fail(store.ErrQuota{Kind: "targets", Max: s.RT.Cfg.MaxTargets}.Error(), "")
 		return
 	}
+	t.PayloadPubKey = strings.TrimSpace(r.FormValue("payload_pubkey"))
 	saved, err := s.db(r).SaveTarget(t, r.FormValue("secret"), r.FormValue("clear_secret") == "1")
 	if err != nil {
-		p.Err = safeErr(err)
-		p.Target = t
-		p.Title, p.Nav = "target", "targets"
-		s.render(w, "target_edit", p)
+		fail(safeErr(err), fieldFor(safeErr(err)))
 		return
 	}
 	s.db(r).Audit(p.User, "target.save", saved.Name)
-	s.redirect(w, r, "/admin/targets", "ok", "Target saved.")
+	if wantsJSON(r) {
+		writeSaveOK(w)
+		return
+	}
+	msg := "Target saved."
+	if id == 0 {
+		msg = "Target created."
+	}
+	s.redirect(w, r, "/admin/targets", "ok", msg)
 }
 
 func (s *Server) targetDelete(w http.ResponseWriter, r *http.Request, p page) {
@@ -486,16 +514,28 @@ func (s *Server) settingsSave(w http.ResponseWriter, r *http.Request, p page) {
 		pairs[9][1] = "UTC"
 	}
 	if _, err := time.LoadLocation(pairs[9][1]); err != nil {
+		if wantsJSON(r) {
+			writeSaveErr(w, "Unknown timezone.", "timezone")
+			return
+		}
 		s.redirect(w, r, "/admin/settings", "bad", "Unknown timezone.")
 		return
 	}
 	for _, kv := range pairs {
 		if err := db.SetSetting(kv[0], kv[1]); err != nil {
+			if wantsJSON(r) {
+				writeSaveErr(w, "Could not save settings.", kv[0])
+				return
+			}
 			s.redirect(w, r, "/admin/settings", "bad", "Could not save settings.")
 			return
 		}
 	}
 	s.db(r).Audit(p.User, "settings.save", "updated settings")
+	if wantsJSON(r) {
+		writeSaveOK(w)
+		return
+	}
 	s.redirect(w, r, "/admin/settings", "ok", "Settings saved.")
 }
 

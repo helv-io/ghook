@@ -26,7 +26,7 @@ func (d *DB) migrate() error {
 	if !d.hasColumn("accounts", "user_id") {
 		return fmt.Errorf("unrecognized ghook database schema")
 	}
-	return nil
+	return d.ensure()
 }
 
 func (d *DB) tableExists(name string) (bool, error) {
@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS targets (
   digest_at TEXT NOT NULL DEFAULT '',
   rate_per_minute INTEGER NOT NULL DEFAULT 0,
   last_digest INTEGER NOT NULL DEFAULT 0,
+  payload_pubkey TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   UNIQUE(user_id, name)
@@ -171,6 +172,13 @@ CREATE TABLE IF NOT EXISTS deliveries (
   UNIQUE(user_id, account_id, gmail_id, route_key)
 );
 CREATE INDEX IF NOT EXISTS idx_del_due ON deliveries(user_id, status, next_attempt);
+CREATE TABLE IF NOT EXISTS user_keys (
+  user_id INTEGER PRIMARY KEY,
+  wrapped_dek TEXT NOT NULL,
+  kek_id TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  rotated_at INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL,

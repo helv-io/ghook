@@ -3,31 +3,40 @@
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 
 {{if .Accounts}}
-<div class="tablewrap"><table class="table">
-<thead><tr><th>Account</th><th>Watch</th><th></th></tr></thead>
-<tbody>{{range .Accounts}}<tr>
-<td class="primary" data-label="Account"><code>{{.Email}}</code>{{if .Disabled}} <span class="pill off">paused</span>{{end}}<span class="sub">{{.Scopes}}</span></td>
-<td data-label="Watch">{{if .WatchError}}<span class="bad">{{.WatchError}}</span>{{else if .WatchExpiry}}{{until .WatchExpiry}}{{else}}not started{{end}}</td>
-<td class="actions-cell" data-label=""><div class="actions">
+{{range .Accounts}}
+<section class="card entity">
+<div class="entity-id">
+<code>{{.Email}}</code>{{if .Disabled}} <span class="pill off">paused</span>{{end}}
+{{with scopes .Scopes}}<span class="entity-scopes">{{range .}}<code>{{.}}</code> {{end}}</span>{{end}}
+</div>
+<div class="entity-status">
+<span class="label">Watch</span>
+{{if .WatchError}}<span class="bad">{{.WatchError}}</span>{{else if .WatchExpiry}}{{until .WatchExpiry}}{{else}}not started{{end}}
+</div>
+<div class="actions">
 <form method="post" action="/admin/accounts/watch"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act">Renew</button></form>
 <form method="post" action="/admin/accounts/pause"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="disabled" value="{{if .Disabled}}0{{else}}1{{end}}"><button class="act">{{if .Disabled}}Resume{{else}}Pause{{end}}</button></form>
 <form method="post" action="/admin/accounts/disconnect" data-confirm="Disconnect {{.Email}}? The watch is stopped and the refresh token is deleted." data-confirm-danger="1"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act danger">Disconnect</button></form>
-</div></td></tr>{{end}}</tbody></table></div>
+</div>
+</section>
+{{end}}
 {{else}}
 <div class="callout warn">No mailbox is connected yet. <a href="/auth/google">Sign in with Google</a> again to grant Gmail access.</div>
 {{end}}
 
-<form method="post" action="/admin/accounts/scopes" class="form">
-<input type="hidden" name="csrf" value="{{.CSRF}}">
+<section class="card">
 <h3>Optional scopes</h3>
-<label class="check"><input type="checkbox" name="gmail_modify" value="1" {{if .Modify}}checked{{end}}> Allow <code>gmail.modify</code> so <span class="gh-word">ghook</span> can create labels and mark routed mail {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}}</label>
-<label class="check"><input type="checkbox" name="gmail_settings" value="1" {{if .SettingsScope}}checked{{end}}> Allow <code>gmail.settings.basic</code> so <span class="gh-word">ghook</span> can create Gmail filters</label>
-<p class="muted">Saving sends you back through Google so the extra access can be granted.</p>
-<div class="row"><button class="btn" type="submit">Update scopes</button></div>
+<form method="post" action="/admin/accounts/scopes" data-google-consent>
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<label class="check"><input type="checkbox" name="gmail_modify" value="1" {{if .Modify}}checked{{end}}> Allow <code>gmail.modify</code> so <span class="gh-word">ghook</span> can create labels and mark routed mail as {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}}.</label>
+<label class="check"><input type="checkbox" name="gmail_settings" value="1" {{if .SettingsScope}}checked{{end}}> Allow <code>gmail.settings.basic</code> so <span class="gh-word">ghook</span> can create Gmail filters.</label>
+<p class="muted">Toggling a scope sends you through Google so the extra access can be granted.</p>
 </form>
+</section>
 
 {{if .Accounts}}
-<details class="card"><summary><h3>Labels</h3></summary>
+<section class="card">
+<h3>Labels</h3>
 <p>A label {{pathcode (printf "%s/CFO" .LabelPrefix)}} routes to the target named CFO when the label convention is on. {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}} is what <span class="gh-word">ghook</span> writes, and it does not route.</p>
 <form method="get" action="/admin/accounts" class="form">
 <div class="field"><label for="labels-account">Account</label>
@@ -56,6 +65,6 @@
 <div class="row"><button class="act" type="submit">Create Gmail filter</button></div>
 <p class="muted">Uses the account selected above. Needs <code>gmail.settings.basic</code>. The label must already exist.</p>
 </form>
-</details>
+</section>
 {{end}}
 {{end}}

@@ -1,6 +1,9 @@
 package web
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestWordmark(t *testing.T) {
 	cases := []struct {
@@ -20,5 +23,15 @@ func TestWordmark(t *testing.T) {
 		if got != c.want {
 			t.Errorf("wordmark(%q)=\n  %q\nwant %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestPathcodeWrapsAtSlash(t *testing.T) {
+	got := string(pathcode("ghook/Routed/<target>"))
+	if !strings.Contains(got, `class="path"`) || !strings.Contains(got, `<wbr>`) || !strings.Contains(got, `path-seg`) {
+		t.Fatalf("got %s", got)
+	}
+	if strings.Contains(got, "ghook/Routed") && !strings.Contains(got, "/<wbr>") {
+		t.Fatal("missing slash wbr")
 	}
 }

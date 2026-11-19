@@ -157,11 +157,24 @@ func (s *Server) funcs() template.FuncMap {
 	return template.FuncMap{
 		"wordmark": wordmark,
 		"pathcode": pathcode,
-		"when":     func(u int64) string { return s.format(u, false) },
-		"until":    func(u int64) string { return s.until(u) },
-		"rel":      func(u int64) string { return s.rel(u) },
-		"lines":    func(v []string) string { return strings.Join(v, "\n") },
-		"summary":  func(sp match.Spec) string { return sp.Summary() },
+		"scopes": func(raw string) []string {
+			var out []string
+			for _, p := range strings.Fields(raw) {
+				p = strings.TrimSuffix(p, "/")
+				if i := strings.LastIndex(p, "/"); i >= 0 {
+					p = p[i+1:]
+				}
+				if p != "" {
+					out = append(out, p)
+				}
+			}
+			return out
+		},
+		"when":    func(u int64) string { return s.format(u, false) },
+		"until":   func(u int64) string { return s.until(u) },
+		"rel":     func(u int64) string { return s.rel(u) },
+		"lines":   func(v []string) string { return strings.Join(v, "\n") },
+		"summary": func(sp match.Spec) string { return sp.Summary() },
 		"has": func(list []string, x string) bool {
 			for _, v := range list {
 				if strings.EqualFold(v, x) {
@@ -365,6 +378,10 @@ func (s *Server) guard(fn func(http.ResponseWriter, *http.Request, page)) http.H
 				_ = r.ParseForm()
 			}
 			if !csrfOK(r, csrf) {
+				if wantsJSON(r) {
+					writeSaveErr(w, "csrf check failed", "")
+					return
+				}
 				http.Error(w, "csrf check failed", http.StatusBadRequest)
 				return
 			}

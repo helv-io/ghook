@@ -19,7 +19,7 @@
 <main id="content"{{if .Solo}} class="solo"{{end}}>
 {{if .Banner}}<div class="callout bad">{{wordmark .Banner}}</div>{{end}}
 {{template "body" .}}</main>
-{{if .Toasts}}<div class="toasts">{{range .Toasts}}<div class="toast {{.Kind}}">{{wordmark .Msg}}</div>{{end}}</div>{{end}}
+<div class="toasts" role="status" aria-live="polite" aria-relevant="additions" aria-atomic="false">{{range .Toasts}}<div class="toast {{.Kind}}">{{wordmark .Msg}}</div>{{end}}</div>
 {{if and .CSRF (not .Solo)}}<dialog class="modal" id="confirm"><h3>Confirm</h3><p data-confirm-text></p><div class="actions"><button type="button" class="act" data-confirm-cancel>Cancel</button><button type="button" class="act" data-confirm-ok>Confirm</button></div></dialog>
 <dialog class="modal wide" id="keys"><h3>Keyboard</h3>
 <div class="keys"><span><kbd>g</kbd> then <kbd>d</kbd> status</span><span><kbd>g</kbd> <kbd>a</kbd> accounts</span><span><kbd>g</kbd> <kbd>r</kbd> routes</span><span><kbd>g</kbd> <kbd>t</kbd> targets</span><span><kbd>g</kbd> <kbd>l</kbd> deliveries</span><span><kbd>g</kbd> <kbd>s</kbd> settings</span><span><kbd>g</kbd> <kbd>u</kbd> audit</span><span><kbd>/</kbd> search</span><span><kbd>?</kbd> this list</span><span><kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> reorder a focused route</span></div>
