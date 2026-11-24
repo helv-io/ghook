@@ -218,9 +218,9 @@ func TestDecideClaimedSuppressesFallback(t *testing.T) {
 }
 
 func TestSortSendersOrder(t *testing.T) {
-	in := []string{"zed@b.com", "*.capitalone.com", "mercury.com", "Ada@example.com", "*.Alpha.com", "chase.com", "@bank.com", "MERCURY.COM", "bob@a.com", "ada@example.com"}
+	in := []string{"zed@b.com", "*.cards.example.com", "beta.example.com", "Ada@example.com", "*.Bank.example.com", "alpha.example.com", "@bank.com", "BETA.EXAMPLE.COM", "bob@a.com", "ada@example.com"}
 	got := SortSenders(in)
-	want := []string{"@bank.com", "chase.com", "mercury.com", "*.Alpha.com", "*.capitalone.com", "Ada@example.com", "bob@a.com", "zed@b.com"}
+	want := []string{"alpha.example.com", "@bank.com", "beta.example.com", "*.Bank.example.com", "*.cards.example.com", "Ada@example.com", "bob@a.com", "zed@b.com"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("got %v\nwant %v", got, want)
 	}
