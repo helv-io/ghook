@@ -93,7 +93,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 
 **Target.** A named webhook: a URL and a secret. Auth is Bearer (default), a named header, or HMAC (`X-Ghook-Signature`). Every POST also sends `X-Ghook-Delivery`. On the target form, paste `URL KEY` (one space) and use **Fill fields** for a Grok Bot webhook. A target may also supply an `age1…` public key; ghook then encrypts the outbound body so only the holder of the matching secret can read it.
 
-**Route.** An ordered rule that matches mail and posts to one target. The first match wins unless the route says **continue**. A fallback runs only when nothing else matched, and its filter still applies. Use the simulator against recent mail before you rely on a rule.
+**Route.** An ordered rule that matches mail and posts to one target. The first match wins unless the route says **continue**. A fallback runs only when nothing else matched, and its filter still applies. Use the simulator against recent mail before you rely on a rule. Sender lists are kept sorted: domains, then `*.` domains, then full addresses. On **routes**, click a value to edit it in place.
 
 | Field | Match |
 | --- | --- |
