@@ -56,7 +56,7 @@ func TestShortAndFullTime(t *testing.T) {
 
 func TestSender(t *testing.T) {
 	cases := []struct{ in, name, addr string }{
-		{`Premier Association Management LLC <support@example.com>`, "Premier Association Management LLC", "support@example.com"},
+		{`Acme Property Management LLC <support@example.com>`, "Acme Property Management LLC", "support@example.com"},
 		{`"Ada, L." <ada@example.com>`, "Ada, L.", "ada@example.com"},
 		{`ada@example.com`, "ada@example.com", ""},
 		{`Broken <not an address>`, "Broken", "not an address"},
