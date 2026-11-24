@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/helv-io/ghook/internal/mail"
@@ -29,6 +30,9 @@ type DB struct {
 	Source string
 	uid    int64
 	all    bool
+	path   string
+	// maint serializes compaction across every handle copied from one Open.
+	maint *sync.Mutex
 }
 
 // Open opens (and creates) the database at path and applies the schema.
@@ -37,12 +41,18 @@ func Open(path, secretsKey, keyFile string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	s, err := sql.Open("sqlite", path)
+	// Pragmas go in the DSN so a reopened connection gets them too. A WAL over
+	// 64 MiB is cut back after each checkpoint instead of keeping its high-water size.
+	dsn := path
+	if !strings.HasPrefix(dsn, "file:") && !strings.Contains(dsn, "?") {
+		dsn = "file:" + path + "?_pragma=auto_vacuum(2)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=journal_size_limit(67108864)&_pragma=foreign_keys(1)"
+	}
+	s, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 	s.SetMaxOpenConns(1)
-	d := &DB{SQL: s, Box: box, root: box, Source: src}
+	d := &DB{SQL: s, Box: box, root: box, Source: src, path: path, maint: &sync.Mutex{}}
 	if err := d.migrate(); err != nil {
 		_ = s.Close()
 		return nil, err
@@ -338,7 +348,7 @@ func (d *DB) AccountByID(id int64) (Account, bool, error) {
 
 func (d *DB) openAccount(a Account) Account {
 	if a.refresh != "" {
-		if p, err := d.openSealed(a.refresh); err == nil {
+		if p, err := d.openDeep(a.refresh); err == nil {
 			a.refresh = p
 		} else {
 			a.refresh = ""
@@ -346,7 +356,7 @@ func (d *DB) openAccount(a Account) Account {
 		}
 	}
 	if a.access != "" {
-		if p, err := d.openSealed(a.access); err == nil {
+		if p, err := d.openDeep(a.access); err == nil {
 			a.access = p
 		} else {
 			a.access = ""
@@ -370,14 +380,14 @@ func (d *DB) SaveAccount(email, refresh, access string, accessExp int64, scopes,
 	if !ok {
 		_, err = d.SQL.Exec(`INSERT INTO accounts(user_id, email, refresh_token, access_token, access_expiry, scopes, history_id, created_at, updated_at)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			d.uid, email, d.Box.Seal(refresh), d.Box.Seal(access), accessExp, scopes, historyID, t, t)
+			d.uid, email, d.sealOnce(refresh), d.sealOnce(access), accessExp, scopes, historyID, t, t)
 	} else {
 		if refresh == "" {
 			refresh = cur.refresh
 		}
 		_, err = d.SQL.Exec(`UPDATE accounts SET refresh_token=?, access_token=?, access_expiry=?, scopes=?,
 			history_id=CASE WHEN ?!='' THEN ? ELSE history_id END, updated_at=? WHERE id=? AND user_id=?`,
-			d.Box.Seal(refresh), d.Box.Seal(access), accessExp, scopes, historyID, historyID, t, cur.ID, d.uid)
+			d.sealOnce(refresh), d.sealOnce(access), accessExp, scopes, historyID, historyID, t, cur.ID, d.uid)
 	}
 	if err != nil {
 		return Account{}, err
@@ -386,11 +396,40 @@ func (d *DB) SaveAccount(email, refresh, access string, accessExp int64, scopes,
 	return a, err
 }
 
-// UpdateTokens caches a refreshed access token.
+// UpdateTokens caches a refreshed access token. An empty refresh keeps the stored one.
 func (d *DB) UpdateTokens(id int64, refresh, access string, exp int64) error {
+	if refresh == "" {
+		_, err := d.SQL.Exec(`UPDATE accounts SET access_token=?, access_expiry=?, updated_at=? WHERE id=? AND user_id=?`,
+			d.sealOnce(access), exp, now(), id, d.uid)
+		return err
+	}
 	_, err := d.SQL.Exec(`UPDATE accounts SET refresh_token=?, access_token=?, access_expiry=?, updated_at=? WHERE id=? AND user_id=?`,
-		d.Box.Seal(refresh), d.Box.Seal(access), exp, now(), id, d.uid)
+		d.sealOnce(refresh), d.sealOnce(access), exp, now(), id, d.uid)
 	return err
+}
+
+// sealOnce seals plain text and leaves an already sealed value alone. Sealing
+// a sealed value nests it: each pass grows it by a third, and a token that is
+// re-saved often grows without bound.
+func (d *DB) sealOnce(s string) string {
+	if s == "" || secrets.IsSealed(s) {
+		return s
+	}
+	return d.Box.Seal(s)
+}
+
+// openDeep opens a value and any sealed layers nested inside it, so a value
+// that was sealed more than once reads as its plain text again.
+func (d *DB) openDeep(s string) (string, error) {
+	p, err := d.openSealed(s)
+	for i := 0; err == nil && i < 64 && secrets.IsSealed(p); i++ {
+		var next string
+		next, err = d.openSealed(p)
+		if err == nil {
+			p = next
+		}
+	}
+	return p, err
 }
 
 // SetWatch records a watch result.
@@ -583,9 +622,9 @@ func (d *DB) SaveTarget(t Target, secret string, clearSecret bool) (Target, erro
 	case clearSecret:
 		stored = ""
 	case secret != "":
-		stored = d.Box.Seal(secret)
+		stored = d.sealOnce(secret)
 	case ok:
-		stored = d.Box.Seal(cur.secret)
+		stored = d.sealOnce(cur.secret)
 	}
 	ts := now()
 	body, paused := 0, 0

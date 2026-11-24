@@ -39,6 +39,8 @@ func main() {
 			os.Exit(replayCmd(os.Args[2:]))
 		case "keys":
 			os.Exit(keysCmd(os.Args[2:]))
+		case "compact":
+			os.Exit(compactCmd())
 		case "-h", "--help", "help":
 			usage()
 			return
@@ -59,11 +61,12 @@ func usage() {
   ghook replay          re-queue deliveries
   ghook keys rotate     mint a new per-user data key and re-seal secrets
   ghook keys rotate-kek re-wrap every data key with a new instance KEK
+  ghook compact         truncate the WAL and give free pages back to the disk
 
 Environment: PUBLIC_URL, LISTEN_ADDR, DB_PATH, GOOGLE_CLIENT_FILE or GOOGLE_CLIENT_JSON,
 PUBSUB_PROJECT, PUBSUB_TOPIC (default gmail-inbox), PUBSUB_SUBSCRIPTION (default ghook-pull),
 PUBSUB_SA_FILE or PUBSUB_SA_JSON, SECRETS_KEY, METRICS_TOKEN, MAX_TARGETS, MAX_ROUTES,
-MAX_DELIVERIES_PER_DAY, PUID, PGID.
+MAX_DELIVERIES_PER_DAY, COMPACT_AT (default 03:15, or off), PUID, PGID.
 `)
 }
 
@@ -237,5 +240,21 @@ func replayCmd(args []string) int {
 		return 1
 	}
 	fmt.Printf("re-queued %d deliveries\n", n)
+	return 0
+}
+
+func compactCmd() int {
+	db, err := openDB()
+	if err != nil {
+		log.Print(err)
+		return 1
+	}
+	defer db.Close()
+	res, err := db.Compact()
+	if err != nil {
+		log.Print(err)
+		return 1
+	}
+	fmt.Printf("compacted (%s): %d -> %d bytes in %s\n", res.Mode, res.Before.Bytes(), res.After.Bytes(), res.Took.Round(time.Millisecond))
 	return 0
 }

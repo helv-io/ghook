@@ -108,6 +108,13 @@ There is no Save button on an existing resource. Creation of a new route or targ
 - Placement: bottom-right on desktop, bottom-center below 800px. The stack is `pointer-events:none`; each toast is `auto`. Toasts are non-blocking and must not shift the page layout.
 - `prefers-reduced-motion: reduce` disables the fade.
 
+## Database upkeep
+
+- `store.Open` sets pragmas in the DSN (busy_timeout, WAL, `journal_size_limit` 64 MiB, foreign keys) so a reopened connection keeps them. New files use `auto_vacuum=INCREMENTAL`.
+- `runtime.compactLoop` runs `purge` then `store.Compact` daily at `COMPACT_AT` (default 03:15, `off` disables), and once ~30s after start when `FileStats.NeedsCompact` (a quarter of the file free and at least 8 MiB, or a WAL of 64 MiB or more). `Compact` checkpoints with TRUNCATE, runs one full `VACUUM` on a file that is not yet incremental (which converts it), then `incremental_vacuum` after that. A second call while one runs returns `ErrCompactBusy`. The last run is the instance setting `compact_last`.
+- Never seal a value that is already sealed; use `sealOnce`. Sealing a sealed token nests it and the row grows by a third on every save. `openDeep` unwraps such values on read.
+- `gmailx.savingSource` starts with the cached access token so it only writes back after a real refresh, not on every `Dial`.
+
 ## Data protection
 
 ghook must read mail in memory to decide a route, so this is not end-to-end encryption. Be honest about that in the README and the privacy page. Confidential VMs are a possible future hardening, not something this version does.

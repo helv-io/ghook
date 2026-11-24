@@ -60,7 +60,9 @@ func Dial(ctx context.Context, clientJSON, refresh, access string, expiry time.T
 		return nil, fmt.Errorf("oauth client file: %w", err)
 	}
 	tok := &oauth2.Token{RefreshToken: refresh, AccessToken: access, Expiry: expiry}
-	src := &savingSource{base: oauth2.ReuseTokenSource(tok, cfg.TokenSource(ctx, tok)), refresh: refresh, save: save}
+	// last starts at the cached token, so only a real refresh is written back.
+	// Saving on every Dial rewrote the account row on every Gmail call.
+	src := &savingSource{base: oauth2.ReuseTokenSource(tok, cfg.TokenSource(ctx, tok)), refresh: refresh, last: access, save: save}
 	svc, err := gmail.NewService(ctx, option.WithTokenSource(src))
 	if err != nil {
 		return nil, err

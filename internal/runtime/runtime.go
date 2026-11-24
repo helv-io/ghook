@@ -87,6 +87,7 @@ func (a *App) Start(ctx context.Context) {
 	go a.Worker.Run(ctx)
 	go a.pull(ctx)
 	go a.maintenance(ctx)
+	go a.compactLoop(ctx)
 }
 
 func (a *App) maintenance(ctx context.Context) {

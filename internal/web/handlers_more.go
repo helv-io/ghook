@@ -708,6 +708,14 @@ func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "ghook_deliveries{status=\"retry\"} %d\n", counts.Retry)
 	fmt.Fprintf(w, "ghook_deliveries{status=\"dead\"} %d\n", counts.Dead)
 	fmt.Fprintf(w, "ghook_deliveries{status=\"sent\"} %d\n", counts.Sent)
+	if st, err := s.RT.DB.Stats(); err == nil {
+		fmt.Fprintf(w, "ghook_db_bytes %d\n", st.Bytes())
+		fmt.Fprintf(w, "ghook_db_free_bytes %d\n", st.FreeBytes())
+		fmt.Fprintf(w, "ghook_db_wal_bytes %d\n", st.WAL)
+	}
+	if t := s.RT.DB.CompactLast(); !t.IsZero() {
+		fmt.Fprintf(w, "ghook_db_compact_last_timestamp_seconds %d\n", t.Unix())
+	}
 	accs, _ := db.Accounts()
 	var watches int
 	for _, a := range accs {
