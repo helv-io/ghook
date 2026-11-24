@@ -105,7 +105,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 | Attachment | has one, or has none. |
 | Combine | AND or OR across those fields. An empty filter matches everything. |
 
-**Label convention.** On **settings**, leave the prefix at `ghook` and the convention on. A Gmail label `ghook/<target>` delivers to the target of that name with no route. Existing `Ghook/` labels still match. `ghook/Routed/CFO` is the label ghook writes after a route opts in, and it does not itself route.
+**Label convention.** On **settings**, leave the prefix at `ghook` and the convention on. A Gmail label `ghook/<target>` delivers to the target of that name with no route. Existing `Ghook/` labels still match. `ghook/Routed/<target>` is the label ghook writes after a route opts in, and it does not itself route.
 
 **Deliveries.** Each match is an outbox row. Retry keeps the same `X-Ghook-Delivery` id so the receiver can dedupe. Replay (shown in Testing mode) mints a new id. The outbox uses exponential backoff. After the attempt limit or the age limit the row is dead. Quiet hours, a digest time, a per-target rate limit, and pause are set on the target. Retry limits are on **settings**.
 
