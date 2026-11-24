@@ -646,3 +646,12 @@ details.more .more-body>h3:first-child{margin-top:6px}
 details.more>summary{text-decoration:none}
 .field[hidden]{display:none}
 .checks[hidden]{display:none}
+details.rx-examples{margin:6px 0 0}
+details.rx-examples>summary{display:inline-block;color:var(--dim);font-size:12px;margin:2px 0}
+.rx-table{border-collapse:collapse;margin:4px 0;font-size:12px}
+.rx-table td{padding:3px 12px 3px 0;vertical-align:middle;color:var(--dim)}
+.rx-table .mval{cursor:pointer;font-size:12px;white-space:normal;word-break:break-all;text-align:left}
+.form .field>details.rx-examples{grid-column:2;min-width:0}
+@media (max-width:640px){.form .field>details.rx-examples{grid-column:1}}
+.rx-table td:first-child{white-space:nowrap}
+.rx-table .mval{word-break:normal;overflow-wrap:anywhere}

@@ -554,3 +554,18 @@ document.querySelectorAll("form[data-autosubmit]").forEach(function (f) {
     el.addEventListener("change", function () { f.submit(); });
   });
 });
+
+(function () {
+  // Example buttons put their pattern into a field and save like a typed edit.
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-insert]");
+    if (!b) return;
+    var form = b.closest("form");
+    var f = form && form.querySelector("[name=" + b.getAttribute("data-insert") + "]");
+    if (!f) return;
+    f.value = b.getAttribute("data-value");
+    f.dispatchEvent(new Event("input", {bubbles: true}));
+    f.dispatchEvent(new Event("change", {bubbles: true}));
+    f.focus();
+  });
+})();

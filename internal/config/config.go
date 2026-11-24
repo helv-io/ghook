@@ -11,7 +11,7 @@ import (
 )
 
 // Version is the release stamped into the UI and the User-Agent.
-const Version = "0.2.3"
+const Version = "0.2.4"
 
 // Config holds boot configuration.
 type Config struct {

@@ -99,3 +99,14 @@ func TestSettingsRendersToTheEnd(t *testing.T) {
 		}
 	}
 }
+
+func TestRouteFormHasSubjectExamples(t *testing.T) {
+	srv, db := testServer(t)
+	ck, _, _ := loginAs(t, srv, db, "sub-a", "ada@example.com", "Ada")
+	body := read(t, get(srv, "/admin/routes/new", ck))
+	for _, ex := range match.SubjectExamples {
+		if !strings.Contains(body, ex.Label) || !strings.Contains(body, `data-insert="subject"`) {
+			t.Fatalf("route form is missing the %q example", ex.Label)
+		}
+	}
+}

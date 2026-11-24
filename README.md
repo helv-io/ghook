@@ -98,12 +98,24 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 | Field | Match |
 | --- | --- |
 | From, To, Cc | An address or a domain. A bare domain covers it and every subdomain; `*.` in front covers subdomains only. Case-insensitive. A list is OR. |
-| Subject | Regular expression. `(?i)` for case insensitive. A broken expression matches nothing. |
+| Subject | Regular expression (Go RE2). `(?i)` for case insensitive. A broken expression matches nothing. Examples below. |
 | Contains | Case-insensitive, in the snippet or the body. |
 | Labels | Any listed label. Names, or system ids such as `INBOX`. |
 | Category | primary, social, promotions, updates, forums. |
 | Attachment | has one, or has none. |
 | Combine | AND or OR across those fields. An empty filter matches everything. |
+
+Subject examples (also under **Examples** next to the field; click one to insert it):
+
+| To match | Pattern |
+| --- | --- |
+| Either word | `(?i)\b(invoice\|payment)\b` |
+| Both words, any order | `(?i)\binvoice\b.*\bdue\b\|\bdue\b.*\binvoice\b` |
+| One whole word, any case | `(?i)\breceipt\b` |
+| Starts with Re: | `(?i)^re:` |
+| Has a number like #1234 | `#\d+` |
+
+RE2 has no lookahead, so a pattern cannot exclude a word.
 
 **Label convention.** On **settings**, leave the prefix at `ghook` and the convention on. A Gmail label `ghook/<target>` delivers to the target of that name with no route. Existing `Ghook/` labels still match. `ghook/Routed/<target>` is the label ghook writes after a route opts in, and it does not itself route.
 

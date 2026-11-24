@@ -20,7 +20,11 @@
 <textarea id="cc" name="cc" rows="2">{{lines .Route.Spec.Cc}}</textarea></div>
 <div class="field"><label for="subject">Subject matches</label>
 <input id="subject" name="subject" value="{{.Route.Spec.Subject}}">
-<p class="muted">A regular expression. <code>(?i)</code> ignores case.</p></div>
+<p class="muted">A regular expression. <code>(?i)</code> ignores case.</p>
+<details class="rx-examples"><summary>Examples</summary>
+<table class="rx-table"><tbody>{{range subjectExamples}}<tr><td>{{.Label}}</td><td><button type="button" class="mval re" data-insert="subject" data-value="{{.Pattern}}" title="Use this pattern">{{.Pattern}}</button></td></tr>{{end}}</tbody></table>
+<p class="muted">Click one to use it, then swap in your own words. These patterns can't exclude a word.</p>
+</details></div>
 <div class="field"><label for="contains">Body contains</label>
 <input id="contains" name="contains" value="{{.Route.Spec.Contains}}"></div>
 <div class="field"><label for="labels">Gmail labels</label>
