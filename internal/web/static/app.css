@@ -1,6 +1,6 @@
 /* ghook admin: one stylesheet, shared components only (no page-specific rules).
    Visual system: dark, thin lines, square corners, shared type and tokens.
-   Components: .quick .login .brandmark .choices .card .table .tablewrap .primary .status .actions-cell .actions-th .copybox .copyhint .codehost .gated .helper-opener .si-status .tip .pill .chip .code .actions .act .toggle .btn .fill .form .field .pairs .pair .group .toast .modal .muted .row .dialog-head .dialog-body .reveal .dsec .danger-zone .action-groups .filter .logbar .logview .logline .logdivider .logjump .desc .desc-line .split .menu .inline .nav-btn .nav-panel .here
+   Components: .matchbox .msec .mval .joiner .twistie .handle .sender .dest .chips .filters .fieldrow .quick .login .brandmark .choices .card .table .tablewrap .primary .status .actions-cell .actions-th .copybox .copyhint .codehost .gated .helper-opener .si-status .tip .pill .chip .code .actions .act .toggle .btn .fill .form .field .pairs .pair .group .toast .modal .muted .row .dialog-head .dialog-body .reveal .dsec .danger-zone .action-groups .filter .logbar .logview .logline .logdivider .logjump .desc .desc-line .split .menu .inline .nav-btn .nav-panel .here
    Dark, thin lines, square corners. Sans-serif text; monospace only for aliases, URLs, tokens and code. */
 :root{--bg:#0e0f11;--panel:#121417;--hover:#171a1e;--fg:#d6d8db;--dim:#8b9097;--line:#2c3036;--line2:#22262b;
 --acc:#7fb8ff;--bad:#ff8a80;--ok:#8fd694;--warn:#e6c07b;--tint-url:rgba(230,192,123,.075);--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -532,7 +532,6 @@ html,body{touch-action:manipulation}
 .stat span{display:block;margin-top:4px;color:var(--dim);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
 .feed{max-height:340px;overflow:auto;background:var(--well);border:1px solid var(--line)}
 .steps{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
-.handle{cursor:grab;color:var(--dim);user-select:none;font-size:16px;letter-spacing:-1px}
 tr.dragging{opacity:.55}
 .keys{display:flex;flex-wrap:wrap;gap:8px 16px;margin:6px 0}
 .keys span{color:var(--dim)}
@@ -566,4 +565,69 @@ label.check.is-invalid{color:var(--fg)}
 @media (max-width:800px){
   .entity{flex-direction:column;gap:10px}
   .entity .actions{width:100%;flex-wrap:wrap}
+}
+
+/* single-line cells: times, chips, badges. A .nw cell never wraps and takes only the room it needs. */
+.table td.nw{white-space:nowrap;overflow-wrap:normal;width:1%}
+/* drag handle: one column of dots, the whole cell is the grab area; Alt+arrow moves a focused row */
+.table td.handle-cell{width:1%;padding:0 0 0 6px}
+.handle{display:inline-flex;align-items:center;justify-content:center;width:24px;height:36px;padding:0;border:0;background:none;color:var(--dim);cursor:grab}
+.handle:hover,.handle:focus-visible{color:var(--fg)}
+.handle:active{cursor:grabbing}
+.grip{display:block;width:4px;height:14px;background:radial-gradient(circle at 2px 2px,currentColor 1.4px,transparent 1.9px) 0 0/4px 5px repeat-y}
+/* sender: display name over a muted address, each cut with an ellipsis (the full header is the title) */
+.sender{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.sender-name,.sender-addr{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sender-addr{font-size:12px;color:var(--dim)}
+@media (min-width:801px){.table td.clip{width:22%;max-width:0}}
+/* match: one section per filter field, values one per line. A section with several values is ORed
+   (bar and "any of"); the joiner between sections is the route operator. */
+.matchbox{display:flex;flex-direction:column;align-items:stretch;min-width:0;padding:4px 0}
+.msec{border-left:2px solid var(--line);padding:1px 0 1px 10px;min-width:0}
+.msec.any{border-left-color:var(--kw)}
+.msec-head{display:flex;align-items:baseline;gap:8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);white-space:nowrap}
+.msec-op{font-weight:400;text-transform:none;letter-spacing:0;color:var(--kw)}
+.mvals{list-style:none;margin:3px 0 0;padding:0;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
+.mvals li{margin:0;max-width:100%;min-width:0}
+.mval{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;font:12.5px/20px var(--mono);padding:0 7px;border:1px solid var(--line);background:var(--well);color:var(--fg);text-align:left;cursor:text}
+.mval:hover,.mval:focus-visible{border-color:var(--acc);color:var(--fg);text-decoration:none}
+.mval.re{color:var(--kw)}
+.mval.fixed{cursor:pointer}
+.mval.add{font-family:var(--sans);font-size:12px;color:var(--dim);background:none;border-style:dashed;cursor:pointer}
+.mval.add:hover,.mval.add:focus-visible{color:var(--acc)}
+.mvals input.mval-input{display:inline-block;width:min(100%,34ch);height:22px;padding:0 7px;font:12.5px/20px var(--mono);border-color:var(--acc)}
+.mval.busy{opacity:.55}
+.matchbox.collapsed li.extra{display:none}
+.joiner{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--warn);white-space:nowrap}
+.joiner::before{content:"";width:6px;border-top:1px solid var(--warn-line)}
+.joiner::after{content:"";flex:1 1 auto;max-width:60px;border-top:1px solid var(--warn-line)}
+.twistie{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;margin:6px 0 0;padding:2px 0;border:0;background:none;color:var(--acc);font-size:12px;cursor:pointer}
+.twistie:hover{text-decoration:underline}
+.tw-icon{display:inline-block;width:0;height:0;border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;transition:transform .15s}
+.twistie[aria-expanded=true] .tw-icon{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.tw-icon{transition:none}}
+@media (min-width:801px){.table td.match{width:55%}}
+/* destination: what a target URL points at; the raw URL is the title and the copy button */
+.dest{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dest-label{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dest-sub{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+a.chip{color:var(--fg)}
+a.chip:hover{border-color:var(--acc);color:var(--acc);text-decoration:none}
+.ico{display:inline-block;flex:0 0 auto}
+.lastdel{display:inline-flex;align-items:center;gap:8px;color:inherit}
+.lastdel:hover{text-decoration:none}
+.lastdel:hover time{color:var(--acc)}
+/* filters and one-line forms: labelled controls side by side, wrapping as whole fields */
+.filters,.fieldrow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 14px;margin:0 0 10px}
+.fieldrow{margin:10px 0 0}
+.filters>label,.fieldrow>label{display:flex;flex-direction:column;gap:4px;flex:0 1 13rem;min-width:9rem;font-size:12px;color:var(--dim)}
+.filters select,.fieldrow select,.fieldrow input{width:100%;color-scheme:dark}
+.js [data-nojs]{display:none}
+@media (max-width:800px){
+  .table:not(.kv) td.handle-cell{flex:0 0 auto;order:-3;padding:0}
+  .table:not(.kv) td.match{align-items:flex-start}
+  .table:not(.kv) td.clip,.table:not(.kv) td.dest-cell{align-items:flex-start}
+  .filters>label,.fieldrow>label{flex:1 1 40%}
+  .handle{min-height:44px}
 }

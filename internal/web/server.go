@@ -126,6 +126,11 @@ type page struct {
 
 	Audits []store.AuditRow
 
+	// Loc is the signed-in user's display timezone. Every time on a page is shown in it.
+	Loc                     *time.Location
+	TargetRows              []targetRow
+	RouteNames, TargetNames []string
+
 	LabelConvention                                                      bool
 	Catchup, ResyncDays, RetryAttempts, RetryHours, RetryBase, Retention int
 	Timezone                                                             string
@@ -170,11 +175,26 @@ func (s *Server) funcs() template.FuncMap {
 			}
 			return out
 		},
-		"when":    func(u int64) string { return s.format(u, false) },
-		"until":   func(u int64) string { return s.until(u) },
-		"rel":     func(u int64) string { return s.rel(u) },
-		"lines":   func(v []string) string { return strings.Join(v, "\n") },
-		"summary": func(sp match.Spec) string { return sp.Summary() },
+		"when":  func(u int64) string { return s.format(u, false) },
+		"short": func(u int64) string { return shortTime(u, time.UTC, time.Now()) },
+		"full":  func(u int64) string { return fullTime(u, time.UTC) },
+		"iso": func(u int64) string {
+			if u == 0 {
+				return ""
+			}
+			return time.Unix(u, 0).UTC().Format(time.RFC3339)
+		},
+		"view":        func(sp match.Spec) match.View { return sp.View() },
+		"dest":        targetDest,
+		"authLabel":   authLabel,
+		"statusClass": statusClass,
+		"senderName":  func(f string) string { n, _ := sender(f); return n },
+		"senderAddr":  func(f string) string { _, a := sender(f); return a },
+		"add":         func(a, b int) int { return a + b },
+		"until":       func(u int64) string { return s.until(u) },
+		"rel":         func(u int64) string { return s.rel(u) },
+		"lines":       func(v []string) string { return strings.Join(v, "\n") },
+		"summary":     func(sp match.Spec) string { return sp.Summary() },
 		"has": func(list []string, x string) bool {
 			for _, v := range list {
 				if strings.EqualFold(v, x) {
@@ -193,6 +213,26 @@ func (s *Server) funcs() template.FuncMap {
 }
 
 func (s *Server) loc() *time.Location { return s.locOf(nil) }
+
+// timeFuncs are the template time helpers bound to one display timezone.
+func (s *Server) timeFuncs(loc *time.Location) template.FuncMap {
+	return template.FuncMap{
+		"when": func(u int64) string {
+			if u == 0 {
+				return "—"
+			}
+			return time.Unix(u, 0).In(loc).Format("2006-01-02 15:04")
+		},
+		"short": func(u int64) string { return shortTime(u, loc, time.Now()) },
+		"full":  func(u int64) string { return fullTime(u, loc) },
+		"clock": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return t.In(loc).Format("15:04:05")
+		},
+	}
+}
 
 func (s *Server) locOf(r *http.Request) *time.Location {
 	name := "UTC"
@@ -292,6 +332,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/routes/delete", s.guard(s.routeDelete))
 	mux.HandleFunc("POST /admin/routes/reorder", s.guard(s.routeReorder))
 	mux.HandleFunc("POST /admin/routes/move", s.guard(s.routeMove))
+	mux.HandleFunc("POST /admin/routes/field", s.guard(s.routeField))
 	mux.HandleFunc("POST /admin/routes/simulate", s.guard(s.routeSimulate))
 
 	mux.HandleFunc("GET /admin/targets", s.guard(s.targets))
@@ -346,8 +387,21 @@ func (s *Server) render(w http.ResponseWriter, name string, p page) {
 		p.Ready = s.RT.Cfg.Ready()
 		p.MaxTargets, p.MaxRoutes, p.MaxDeliveries = s.RT.Cfg.MaxTargets, s.RT.Cfg.MaxRoutes, s.RT.Cfg.MaxDeliveries
 	}
+	// The parsed set is never executed itself: html/template cannot clone a set after it runs.
+	// Each render runs a clone with the time helpers bound to the user's timezone.
+	loc := p.Loc
+	if loc == nil {
+		loc = time.UTC
+	}
+	t, err := s.tpl[name].Clone()
+	if err != nil {
+		log.Printf("template %s: %v", name, err)
+		http.Error(w, "template error", http.StatusInternalServerError)
+		return
+	}
+	t = t.Funcs(s.timeFuncs(loc))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tpl[name].ExecuteTemplate(w, "layout", p); err != nil {
+	if err := t.ExecuteTemplate(w, "layout", p); err != nil {
 		log.Printf("template %s: %v", name, err)
 	}
 }
