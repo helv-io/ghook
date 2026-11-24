@@ -7,7 +7,7 @@ import (
 )
 
 func (d *DB) migrate() error {
-	if _, err := d.SQL.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;`); err != nil {
+	if _, err := d.SQL.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA journal_size_limit=67108864;`); err != nil {
 		return err
 	}
 	exists, err := d.tableExists("accounts")

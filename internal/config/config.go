@@ -11,7 +11,7 @@ import (
 )
 
 // Version is the release stamped into the UI and the User-Agent.
-const Version = "0.2.0"
+const Version = "0.2.1"
 
 // Config holds boot configuration.
 type Config struct {
@@ -30,8 +30,10 @@ type Config struct {
 	MaxRoutes     int
 	MaxDeliveries int
 	LogLevel      string
-	PUID          int
-	PGID          int
+	// CompactAt is the local time of the daily compaction, "HH:MM" or "off".
+	CompactAt string
+	PUID      int
+	PGID      int
 }
 
 func env(k, def string) string {
@@ -96,6 +98,7 @@ func Load() *Config {
 		MaxRoutes:     intEnv("MAX_ROUTES", 50),
 		MaxDeliveries: intEnv("MAX_DELIVERIES_PER_DAY", 1000),
 		LogLevel:      strings.ToLower(env("LOG_LEVEL", "info")),
+		CompactAt:     env("COMPACT_AT", "03:15"),
 		PUID:          intEnv("PUID", 1000),
 		PGID:          intEnv("PGID", 1000),
 	}

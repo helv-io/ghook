@@ -187,8 +187,10 @@ A v0.1.3 database is opened and migrated in place. Do not replace the data direc
 | URL | |
 | --- | --- |
 | `/healthz` | `{"status":"ok"}`. The image healthcheck uses this. |
-| `/metrics` | Prometheus text: queue depth, dead letters, user count, active watches. Requires `METRICS_TOKEN`. Aggregate only; no account emails. |
+| `/metrics` | Prometheus text: queue depth, dead letters, user count, active watches, database size and last compaction. Requires `METRICS_TOKEN`. Aggregate only; no account emails. |
 | `/hooks/pubsub` | Optional push receiver. JWT required. |
+
+**Compaction** runs every day at 03:15 local time (`TZ`). It purges rows past the retention window, truncates the WAL and returns free pages to the disk. Set `COMPACT_AT=HH:MM` to move it or `COMPACT_AT=off` to turn it off. A file that is mostly free space is also compacted about 30 seconds after start. `ghook compact` does the same by hand.
 
 **Backup** is a copy of `/data`. You need both `ghook.db` and `secrets.key` (or the `SECRETS_KEY` you set). One without the other cannot open tokens or sealed payloads. To upgrade, copy `./data` somewhere safe, then `docker compose pull && docker compose up -d`.
 
