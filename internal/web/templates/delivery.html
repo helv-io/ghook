@@ -14,7 +14,7 @@
 </tbody></table>
 <div class="row">
 {{if or (eq .Delivery.Status "dead") (eq .Delivery.Status "retry")}}<form method="post" action="/admin/deliveries/retry"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Delivery.ID}}"><button class="act">Retry (same id)</button></form>{{end}}
-{{if or (eq .Delivery.Status "sent") (eq .Delivery.Status "dead") (eq .Delivery.Status "retry")}}<form method="post" action="/admin/deliveries/replay"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Delivery.ID}}"><button class="btn">Replay (new id)</button></form>{{end}}
+{{if and .Testing (or (eq .Delivery.Status "sent") (eq .Delivery.Status "dead") (eq .Delivery.Status "retry"))}}<form method="post" action="/admin/deliveries/replay"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Delivery.ID}}"><button class="btn">Replay (new id)</button></form>{{end}}
 <a class="act" href="/admin/deliveries">Back</a>
 </div></div>
 <h2>Request</h2><pre>{{if .Delivery.RequestLog}}{{.Delivery.RequestLog}}{{else}}Nothing sent yet.{{end}}</pre>

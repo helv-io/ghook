@@ -3,44 +3,55 @@
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <form method="post" action="/admin/settings" class="form wide" data-autosave="/admin/settings">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
-<h3>Labels</h3>
-<div class="field"><label for="label_prefix">Label prefix</label>
-<input id="label_prefix" name="label_prefix" value="{{.LabelPrefix}}">
-<p class="muted">A Gmail label {{pathcode (printf "%s/CFO" .LabelPrefix)}} routes to the target CFO. {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}} is ignored.</p></div>
-<label class="check"><input type="checkbox" name="label_convention" value="1" {{if .LabelConvention}}checked{{end}}> Label-to-target convention</label>
-<h3>Catch-up</h3>
-<div class="field"><label for="catchup_minutes">Interval (minutes)</label>
-<input id="catchup_minutes" type="number" name="catchup_minutes" min="1" value="{{.Catchup}}">
-<p class="muted">history.list on this interval, because a notification can be dropped. Default 30.</p></div>
-<div class="field"><label for="resync_days">Resync window (days)</label>
-<input id="resync_days" type="number" name="resync_days" min="1" max="30" value="{{.ResyncDays}}">
-<p class="muted">Used when the stored history id is too old (Gmail returns 404). Dedupe drops the overlap. Default 2.</p></div>
+<div class="field"><label for="timezone">Your timezone</label>
+<input id="timezone" name="timezone" value="{{.Timezone}}" placeholder="UTC" list="zones">
+<datalist id="zones"><option value="UTC"><option value="America/New_York"><option value="America/Los_Angeles"><option value="Europe/London"><option value="Europe/Paris"><option value="Asia/Tokyo"></datalist>
+<p class="muted">Every time in ghook is shown in this zone.</p></div>
+<div class="field"><label for="notify_target">Send problems to</label>
+<select id="notify_target" name="notify_target"><option value="0">nobody</option>{{range .Targets}}<option value="{{.ID}}" {{if eq .ID $.NotifyTarget}}selected{{end}}>{{.Name}}</option>{{end}}</select>
+<div class="checks" data-show-when="notify_target!=0">
+<label class="check"><input type="checkbox" name="notify_dead" value="1" {{if .NotifyDead}}checked{{end}}> When a delivery gives up</label>
+<label class="check"><input type="checkbox" name="notify_watch" value="1" {{if .NotifyWatch}}checked{{end}}> When a mailbox stops being watched</label>
+</div></div>
+<div class="field"><span class="label">Testing mode</span>
+<div class="checks"><label class="check"><input type="checkbox" name="testing_mode" value="1" {{if .Testing}}checked{{end}}> Show the route simulator and replay buttons</label></div></div>
+<details class="more"{{if .More}} open{{end}}>
+<summary><span class="tw-icon" aria-hidden="true"></span>More options</summary>
+<div class="more-body">
+<h3>History</h3>
+<div class="field"><label for="retention_days">Keep delivery history (days)</label>
+<input id="retention_days" type="number" name="retention_days" min="1" value="{{.Retention}}">
+<p class="muted">Only metadata, unless the box below is on.</p></div>
+<label class="check"><input type="checkbox" name="retain_bodies" value="1" {{if .RetainBodies}}checked{{end}}> Also keep message bodies (encrypted) in the history</label>
 <h3>Retries</h3>
 <div class="field"><label for="retry_max_attempts">Attempts</label>
 <input id="retry_max_attempts" type="number" name="retry_max_attempts" min="1" value="{{.RetryAttempts}}"></div>
-<div class="field"><label for="retry_max_hours">Give-up (hours)</label>
+<div class="field"><label for="retry_max_hours">Give up after (hours)</label>
 <input id="retry_max_hours" type="number" name="retry_max_hours" min="1" value="{{.RetryHours}}"></div>
-<div class="field"><label for="retry_base_seconds">Base (seconds)</label>
+<div class="field"><label for="retry_base_seconds">First wait (seconds)</label>
 <input id="retry_base_seconds" type="number" name="retry_base_seconds" min="1" value="{{.RetryBase}}">
-<p class="muted">Wait doubles each failure, capped at one hour.</p></div>
-<h3>Retention</h3>
-<div class="field"><label for="retention_days">Retention (days)</label>
-<input id="retention_days" type="number" name="retention_days" min="1" value="{{.Retention}}">
-<p class="muted">Metadata only. Bodies are not stored unless you turn the switch below on, and even then only inside a delivery log you opted into.</p></div>
-<label class="check"><input type="checkbox" name="retain_bodies" value="1" {{if .RetainBodies}}checked{{end}}> Keep message bodies in the delivery log</label>
-<h3>Display and notifications</h3>
-<div class="field"><label for="timezone">Display timezone</label>
-<input id="timezone" name="timezone" value="{{.Timezone}}" placeholder="UTC" list="zones">
-<datalist id="zones"><option value="UTC"><option value="America/New_York"><option value="America/Los_Angeles"><option value="Europe/London"><option value="Europe/Paris"><option value="Asia/Tokyo"></datalist></div>
-<div class="field"><label for="notify_target">Notify this target</label>
-<select id="notify_target" name="notify_target"><option value="0">none</option>{{range .Targets}}<option value="{{.ID}}" {{if eq .ID $.NotifyTarget}}selected{{end}}>{{.Name}}</option>{{end}}</select></div>
-<label class="check"><input type="checkbox" name="notify_dead" value="1" {{if .NotifyDead}}checked{{end}}> Notify on dead letters</label>
-<label class="check"><input type="checkbox" name="notify_watch" value="1" {{if .NotifyWatch}}checked{{end}}> Notify when a watch renewal fails</label>
+<p class="muted">The wait doubles after each failure, up to an hour.</p></div>
+<h3>Labels</h3>
+<label class="check"><input type="checkbox" name="label_convention" value="1" {{if .LabelConvention}}checked{{end}}> Route by Gmail label</label>
+<div class="field"><label for="label_prefix">Label prefix</label>
+<input id="label_prefix" name="label_prefix" value="{{.LabelPrefix}}">
+<p class="muted">A message labeled {{pathcode (printf "%s/CFO" .LabelPrefix)}} goes to the target named CFO.</p></div>
+<h3>Missed mail</h3>
+<div class="field"><label for="catchup_minutes">Check for missed mail every (minutes)</label>
+<input id="catchup_minutes" type="number" name="catchup_minutes" min="1" value="{{.Catchup}}"></div>
+<div class="field"><label for="resync_days">Look back up to (days)</label>
+<input id="resync_days" type="number" name="resync_days" min="1" max="30" value="{{.ResyncDays}}">
+<p class="muted">Used if Gmail's history has expired. Duplicates are dropped.</p></div>
+<h3>Database</h3>
+<p class="muted">{{if .DBSize}}{{.DBSize}} on disk. {{end}}Compacted daily at {{if eq .CompactAt "off"}}never (COMPACT_AT=off){{else}}{{.CompactAt}} server time{{end}}{{if not .CompactLast.IsZero}}; last {{template "when" .CompactLast.Unix}}{{end}}.</p>
 <h3>Usage</h3>
-<p class="muted">This account may have {{.MaxTargets}} targets, {{.MaxRoutes}} routes, and {{.MaxDeliveries}} deliveries per day. Used: {{.TargetCount}} targets, {{.RouteCount}} routes, {{.TodayCount}} deliveries today (UTC).</p>
+<p class="muted">{{.TargetCount}} of {{.MaxTargets}} targets, {{.RouteCount}} of {{.MaxRoutes}} routes, {{.TodayCount}} of {{.MaxDeliveries}} deliveries today (UTC).</p>
+</div></details>
 </form>
 
-<h2>Export and import</h2>
+<details class="more">
+<summary><span class="tw-icon" aria-hidden="true"></span>Export and import</summary>
+<div class="more-body">
 <div class="card">
 <p>YAML of routes and targets. Secrets are left out unless you set a passphrase, which seals them in the file. An import with a blank secret does not clear the one already stored.</p>
 <form method="post" action="/admin/export" class="form">
@@ -59,4 +70,5 @@
 <input id="import-passphrase" type="password" name="passphrase" autocomplete="new-password"></div>
 <div class="row"><button class="btn" type="submit">Import</button></div>
 </form></div>
+</div></details>
 {{end}}

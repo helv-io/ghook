@@ -18,10 +18,10 @@
 <td class="nw" data-label="Status"><span class="pill {{statusClass .Status}}"{{if .LastError}} title="{{.LastError}}"{{end}}>{{.Status}}{{if .Attempts}} · {{.Attempts}}{{end}}</span></td>
 <td class="actions-cell"><div class="actions">
 {{if or (eq .Status "dead") (eq .Status "retry")}}<form method="post" action="/admin/deliveries/retry"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Retry</button></form>{{end}}
-{{if or (eq .Status "sent") (eq .Status "dead") (eq .Status "retry")}}<form method="post" action="/admin/deliveries/replay"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Replay</button></form>{{end}}
-</div></td></tr>{{else}}<tr><td class="empty" colspan="7">No deliveries.</td></tr>{{end}}</tbody>
+{{if and $.Testing (or (eq .Status "sent") (eq .Status "dead") (eq .Status "retry"))}}<form method="post" action="/admin/deliveries/replay"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Replay</button></form>{{end}}
+</div></td></tr>{{else}}<tr><td class="empty" colspan="7">Nothing delivered yet. Mail that matches a route shows up here.</td></tr>{{end}}</tbody>
 </table></div>
-<div class="card"><h3>Replay a window</h3>
+{{if .Testing}}<div class="card"><h3>Replay a window</h3>
 <p>Re-queue every sent, dead or retrying delivery in the window. Each one gets a new <code>X-Ghook-Delivery</code> id. Retry on a single row keeps the same id.</p>
 <form method="post" action="/admin/deliveries/window" class="fieldrow">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -30,5 +30,5 @@
 <label>Since<input type="datetime-local" name="since"></label>
 <label>Until<input type="datetime-local" name="until"></label>
 <button class="btn" type="submit">Replay window</button>
-</form></div>
+</form></div>{{end}}
 {{end}}

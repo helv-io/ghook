@@ -84,6 +84,7 @@ func (s *Server) createFilter(w http.ResponseWriter, r *http.Request, p page) {
 func (s *Server) routes(w http.ResponseWriter, r *http.Request, p page) {
 	p.Title, p.Nav = "routes", "routes"
 	p.Routes, _ = s.db(r).Routes()
+	p.Targets, _ = s.db(r).Targets()
 	s.render(w, "routes", p)
 }
 
@@ -105,6 +106,7 @@ func (s *Server) routeEdit(w http.ResponseWriter, r *http.Request, p page) {
 	} else {
 		p.Route.Enabled = true
 	}
+	p.More = routeAdvanced(p.Route, p.IsNew)
 	s.render(w, "route_edit", p)
 }
 
@@ -182,6 +184,7 @@ func (s *Server) routeForm(w http.ResponseWriter, r *http.Request, p page, rt st
 	p.IsNew = rt.ID == 0
 	p.Err = err
 	p.Previews = prev
+	p.More = routeAdvanced(rt, p.IsNew)
 	s.render(w, "route_edit", p)
 }
 
@@ -417,31 +420,50 @@ func (s *Server) targetEdit(w http.ResponseWriter, r *http.Request, p page) {
 		p.Target = t
 		p.Title = t.Name
 	}
+	p.More = targetAdvanced(p.Target)
 	s.render(w, "target_edit", p)
 }
 
 func (s *Server) targetSave(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
 	t := store.Target{
-		ID: id, Name: r.FormValue("name"), URL: r.FormValue("url"), AuthMode: r.FormValue("auth_mode"),
+		ID: id, Name: strings.TrimSpace(r.FormValue("name")), URL: strings.TrimSpace(r.FormValue("url")), AuthMode: r.FormValue("auth_mode"),
 		AuthHeader: r.FormValue("auth_header"), Template: r.FormValue("template"),
 		IncludeBody: r.FormValue("include_body") == "1", Paused: r.FormValue("paused") == "1",
 		QuietStart: r.FormValue("quiet_start"), QuietEnd: r.FormValue("quiet_end"),
 		DigestAt: r.FormValue("digest_at"), RatePerMin: atoi(r.FormValue("rate_per_minute")),
 	}
+	// The form has one "webhook" box: the URL, then optionally a space and the key.
+	secret := r.FormValue("secret")
+	hook, viaHook := r.Form["webhook"]
+	if viaHook {
+		u, key := splitWebhook(strings.Join(hook, " "))
+		t.URL = u
+		if key != "" {
+			secret = key
+		}
+	}
 	fail := func(msg, field string) {
 		if wantsJSON(r) {
+			if field == "url" && viaHook {
+				field = "webhook"
+			}
 			writeSaveErr(w, msg, field)
 			return
 		}
 		p.Err = msg
 		p.Target = t
 		p.IsNew = id == 0
+		p.More = targetAdvanced(t)
 		p.Title, p.Nav = "target", "targets"
 		s.render(w, "target_edit", p)
 	}
 	if strings.TrimSpace(t.Name) == "" || strings.TrimSpace(t.URL) == "" {
-		fail("A target needs a name and a URL.", "name")
+		field := "name"
+		if t.Name != "" {
+			field = "url"
+		}
+		fail("A target needs a name and a webhook URL.", field)
 		return
 	}
 	if !strings.HasPrefix(t.URL, "https://") && !strings.HasPrefix(t.URL, "http://") {
@@ -453,7 +475,7 @@ func (s *Server) targetSave(w http.ResponseWriter, r *http.Request, p page) {
 		return
 	}
 	t.PayloadPubKey = strings.TrimSpace(r.FormValue("payload_pubkey"))
-	saved, err := s.db(r).SaveTarget(t, r.FormValue("secret"), r.FormValue("clear_secret") == "1")
+	saved, err := s.db(r).SaveTarget(t, secret, r.FormValue("clear_secret") == "1")
 	if err != nil {
 		fail(safeErr(err), fieldFor(safeErr(err)))
 		return
@@ -581,6 +603,12 @@ func (s *Server) fillSettings(r *http.Request, p *page) {
 	p.TargetCount, p.RouteCount = db.TargetCount(), db.RouteCount()
 	day := time.Now().UTC().Truncate(24 * time.Hour).Unix()
 	p.TodayCount = db.DeliveriesSince(day)
+	p.More = settingsAdvanced(*p)
+	if st, err := s.RT.DB.Stats(); err == nil {
+		p.DBSize = fmt.Sprintf("%.1f MB", float64(st.Bytes())/1e6)
+	}
+	p.CompactLast = s.RT.DB.CompactLast()
+	p.CompactAt = s.RT.Cfg.CompactAt
 }
 
 func (s *Server) settingsSave(w http.ResponseWriter, r *http.Request, p page) {
@@ -603,6 +631,7 @@ func (s *Server) settingsSave(w http.ResponseWriter, r *http.Request, p page) {
 		{"notify_target", r.FormValue("notify_target")},
 		{"notify_dead", on(r, "notify_dead")},
 		{"notify_watch", on(r, "notify_watch")},
+		{"testing_mode", on(r, "testing_mode")},
 	}
 	if pairs[9][1] == "" {
 		pairs[9][1] = "UTC"

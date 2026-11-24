@@ -130,13 +130,13 @@ func TestSessionCSRFAndPagesHideSecrets(t *testing.T) {
 	pages := map[string]string{
 		"/admin":                        "Queue",
 		"/admin/accounts":               "Sign in with Google",
-		"/admin/routes":                 "Simulator",
-		"/admin/routes/new":             "Simulate this draft",
+		"/admin/routes":                 "Add route",
+		"/admin/routes/new":             "More options",
 		"/admin/targets":                "Add target",
-		"/admin/targets/new":            "Grok bot",
+		"/admin/targets/new":            "Webhook",
 		"/admin/targets/" + itoa(tg.ID): "bearer",
-		"/admin/deliveries":             "Replay a window",
-		"/admin/settings":               "Label prefix",
+		"/admin/deliveries":             "Deliveries",
+		"/admin/settings":               "Testing mode",
 		"/admin/audit":                  "Audit",
 		"/admin/account":                "Delete my account",
 		"/healthz":                      `"status":"ok"`,
@@ -360,7 +360,7 @@ func TestSettingsAndExportStayPerUser(t *testing.T) {
 	}
 
 	body := read(t, get(srv, "/admin/settings", aCK))
-	if !strings.Contains(body, "ada-prefix") || !strings.Contains(body, "1 target") {
+	if !strings.Contains(body, "ada-prefix") || !strings.Contains(body, "1 of ") {
 		t.Fatalf("A settings page: %s", clip(body))
 	}
 	body = read(t, get(srv, "/admin/settings", bCK))
