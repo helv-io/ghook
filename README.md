@@ -97,7 +97,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 
 | Field | Match |
 | --- | --- |
-| From, To, Cc | Address (`ada@example.com`) or domain (`example.com`, the apex and every subdomain). `*.capitalone.com` matches subdomains only, not the apex. Case-insensitive. A list is OR. |
+| From, To, Cc | An address or a domain. A bare domain covers it and every subdomain; `*.` in front covers subdomains only. Case-insensitive. A list is OR. |
 | Subject | Regular expression. `(?i)` for case insensitive. A broken expression matches nothing. |
 | Contains | Case-insensitive, in the snippet or the body. |
 | Labels | Any listed label. Names, or system ids such as `INBOX`. |
@@ -105,7 +105,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 | Attachment | has one, or has none. |
 | Combine | AND or OR across those fields. An empty filter matches everything. |
 
-**Label convention.** On **settings**, leave the prefix at `ghook` and the convention on. A Gmail label `ghook/CFO` delivers to the target named `CFO` with no route. Existing `Ghook/` labels still match. `ghook/Routed/CFO` is the label ghook writes after a route opts in, and it does not itself route.
+**Label convention.** On **settings**, leave the prefix at `ghook` and the convention on. A Gmail label `ghook/<target>` delivers to the target of that name with no route. Existing `Ghook/` labels still match. `ghook/Routed/CFO` is the label ghook writes after a route opts in, and it does not itself route.
 
 **Deliveries.** Each match is an outbox row. Retry keeps the same `X-Ghook-Delivery` id so the receiver can dedupe. Replay (shown in Testing mode) mints a new id. The outbox uses exponential backoff. After the attempt limit or the age limit the row is dead. Quiet hours, a digest time, a per-target rate limit, and pause are set on the target. Retry limits are on **settings**.
 
@@ -114,17 +114,17 @@ The default payload is metadata. No body, no attachments:
 ```json
 {
   "source": "ghook",
-  "route": "primary",
-  "account": "ada@example.com",
+  "route": "<route>",
+  "account": "me@example.com",
   "message_id": "18c0...",
   "thread_id": "18c0...",
-  "from": "Ada Lovelace <ada@example.com>",
-  "to": "ceo@example.com",
-  "subject": "Invoice 1042",
+  "from": "Sender <sender@example.com>",
+  "to": "me@example.com",
+  "subject": "Hello",
   "date": "2026-04-01T12:00:00Z",
   "labels": ["INBOX"],
   "category": "primary",
-  "snippet": "please pay the invoice",
+  "snippet": "Hi",
   "gmail_url": "https://mail.google.com/mail/u/0/#all/18c0...",
   "delivery_id": "gh_..."
 }
@@ -166,7 +166,7 @@ What the operator of an instance can and cannot see:
 - Logs redact email addresses and never print secrets. Metrics never include emails.
 - Deleting an account shreds the per-user key first, then deletes the rows.
 
-`ghook keys rotate --user ada@example.com` (or `--all`) mints a new data key and re-seals that user's secrets. `ghook keys rotate-kek` re-wraps every data key and swaps the key file. It only works with a key file (`SECRETS_KEY` must be unset). The previous file is kept as `secrets.key.bak`. Neither command prints key material.
+`ghook keys rotate --user EMAIL` (or `--all`) mints a new data key and re-seals that user's secrets. `ghook keys rotate-kek` re-wraps every data key and swaps the key file. It only works with a key file (`SECRETS_KEY` must be unset). The previous file is kept as `secrets.key.bak`. Neither command prints key material.
 
 ## Environment
 
@@ -198,12 +198,12 @@ The CLI talks to the same database:
 
 ```sh
 ghook healthcheck
-ghook export --user ada@example.com > ghook.yaml
-ghook export --user ada@example.com --passphrase 'correct horse' > ghook.yaml
-ghook import --user ada@example.com ghook.yaml --passphrase 'correct horse'
-ghook replay --user ada@example.com --id 12
-ghook replay --user ada@example.com --route primary --since 2026-04-01
-ghook keys rotate --user ada@example.com
+ghook export --user EMAIL > ghook.yaml
+ghook export --user EMAIL --passphrase PASSPHRASE > ghook.yaml
+ghook import --user EMAIL ghook.yaml --passphrase PASSPHRASE
+ghook replay --user EMAIL --id 12
+ghook replay --user EMAIL --route ROUTE --since 2026-04-01
+ghook keys rotate --user EMAIL
 ghook keys rotate --all
 ghook keys rotate-kek
 ```
@@ -222,7 +222,7 @@ Export omits secrets unless you set a passphrase, which seals them in the file. 
 | Push returns 401 | The audience must be the push URL. The optional email must be the service account Google signs as. |
 | Deliveries sit in retry | The target URL, the secret, and quiet hours. The delivery page has the status and the redacted request. |
 | A route matches nothing | Turn on Testing mode and run the simulator. An invalid subject regex matches nothing. A fallback only runs when no earlier rule matched. |
-| Label `ghook/CFO` did nothing | The convention is on, a target is named `CFO`, and the label is not under `ghook/Routed/`. Existing `Ghook/` labels also match. |
+| Label `ghook/<target>` did nothing | The convention is on, a target has exactly that name, and the label is not under `ghook/Routed/`. Existing `Ghook/` labels also match. |
 
 ## License
 

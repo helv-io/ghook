@@ -62,7 +62,7 @@ func TestSettingsAutosaveNeedsCSRF(t *testing.T) {
 func TestEditPagesHaveNoSaveButton(t *testing.T) {
 	srv, db := testServer(t)
 	ck, scoped, _ := loginAs(t, srv, db, "sub-a", "ada@example.com", "Ada")
-	if _, err := scoped.SaveTarget(store.Target{Name: "CFO", URL: "https://bot.example.com/hook"}, "s", false); err != nil {
+	if _, err := scoped.SaveTarget(store.Target{Name: "Chief of Staff", URL: "https://bot.example.com/hook"}, "s", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := scoped.SaveRoute(store.Route{Name: "invoices", TargetID: 1, Enabled: true}); err != nil {
@@ -116,12 +116,12 @@ func TestEditPagesHaveNoSaveButton(t *testing.T) {
 func TestTargetAutosaveJSON(t *testing.T) {
 	srv, db := testServer(t)
 	ck, scoped, _ := loginAs(t, srv, db, "sub-a", "ada@example.com", "Ada")
-	saved, err := scoped.SaveTarget(store.Target{Name: "CFO", URL: "https://bot.example.com/hook"}, "s", false)
+	saved, err := scoped.SaveTarget(store.Target{Name: "Chief of Staff", URL: "https://bot.example.com/hook"}, "s", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	csrf, _ := srv.Session(reqWith(ck))
-	form := url.Values{"csrf": {csrf}, "id": {itoa(saved.ID)}, "name": {"CFO"}, "url": {"not-a-url"}}
+	form := url.Values{"csrf": {csrf}, "id": {itoa(saved.ID)}, "name": {"Chief of Staff"}, "url": {"not-a-url"}}
 	res := postJSON(t, srv, "/admin/targets/save", form, ck)
 	if res.Code != 400 {
 		t.Fatalf("status %d %s", res.Code, res.Body.String())

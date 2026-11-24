@@ -16,7 +16,7 @@ ghook is a multi-tenant Gmail push router: Gmail `users.watch` in, webhook POST 
 - Technical audience. No fluff, no hand-holding, short lines.
 - The visual system and the GHCR release workflow follow the same conventions as skgate. That connection is for developers; do not mention skgate in the README or in user-facing UI copy.
 - UI copy: short, plain, direct, in the voice of the rest of the app. Labels are nouns or verbs. A hint is one short sentence, and most fields need none. No filler or marketing words, no "Let's", no explanatory paragraphs, no parentheticals, no em dashes.
-- Generic examples only (`ghook.example.com`, `ada@example.com`, `admin@example.com`). No house-specific names, no personal data, no real mailboxes or tokens in code, docs, tests or screenshots.
+- Prefer no example at all: no sample names in placeholders or help text, and no sentence that exists only to give one. Show a format instead (`<target>`, `HH:MM`, `URL KEY`). If a bot or target name is unavoidable, use `Chief of Staff`. Hosts and addresses use `example.com` only. No house-specific names (job titles, real senders, real banks), no personal data, no real mailboxes or tokens in code, docs, tests or screenshots.
 - One version display: semver (`vX.Y.Z`), in the header only.
 - README is for operators. It stays educational and brief. Logging, transactions, CSS rules, the wordmark, CI and the release process stay out of the front page. They live here.
 

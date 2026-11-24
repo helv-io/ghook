@@ -35,7 +35,7 @@
 <label class="check"><input type="checkbox" name="label_convention" value="1" {{if .LabelConvention}}checked{{end}}> Route by Gmail label</label>
 <div class="field"><label for="label_prefix">Label prefix</label>
 <input id="label_prefix" name="label_prefix" value="{{.LabelPrefix}}">
-<p class="muted">A message labeled {{pathcode (printf "%s/CFO" .LabelPrefix)}} goes to the target named CFO.</p></div>
+<p class="muted">A message labeled {{pathcode (printf "%s/<target>" .LabelPrefix)}} goes to the target of that name.</p></div>
 <h3>Missed mail</h3>
 <div class="field"><label for="catchup_minutes">Check for missed mail every (minutes)</label>
 <input id="catchup_minutes" type="number" name="catchup_minutes" min="1" value="{{.Catchup}}"></div>
