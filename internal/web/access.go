@@ -65,5 +65,6 @@ func (s *Server) pageFor(w http.ResponseWriter, r *http.Request, csrf string) (p
 		Public: s.RT.Cfg.PublicURL,
 		Loc:    s.locOf(r),
 	}
+	p.Testing = db.BoolSetting("testing_mode", false)
 	return p, true
 }

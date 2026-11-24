@@ -1,6 +1,6 @@
 {{define "body"}}
 <div class="row spread"><h2>Targets</h2><a class="btn" href="/admin/targets/new">Add target</a></div>
-<p>A target is a named webhook. Pause stops new sends and holds the queue. Test sends one sample and records it in the delivery log.</p>
+<p>A target is a webhook that receives matching mail. Test sends one sample.</p>
 <div class="filter"><input type="search" data-search data-filter="#targets" placeholder="Filter targets" aria-label="Filter targets"></div>
 <div class="card flush tablewrap"><table class="table targets" id="targets">
 <thead><tr><th>Name</th><th>Destination</th><th>Routes</th><th>Last delivery</th><th>Auth</th><th class="actions-th"></th></tr></thead>
@@ -14,6 +14,6 @@
 <td class="actions-cell"><div class="actions">
 <form method="post" action="/admin/targets/pause"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="paused" value="{{if .Paused}}0{{else}}1{{end}}"><button class="act small" type="submit">{{if .Paused}}Resume{{else}}Pause{{end}}</button></form>
 <form method="post" action="/admin/targets/test"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Test</button></form>
-</div></td></tr>{{else}}<tr><td class="empty" colspan="6">No targets yet.</td></tr>{{end}}</tbody>
+</div></td></tr>{{else}}<tr><td class="empty" colspan="6">No targets yet. <a href="/admin/targets/new">Add one</a> by pasting its webhook URL.</td></tr>{{end}}</tbody>
 </table></div>
 {{end}}

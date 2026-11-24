@@ -3,46 +3,44 @@
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <form method="post" action="/admin/targets/save" class="form wide"{{if not .IsNew}} data-autosave="/admin/targets/save"{{end}}>
 <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Target.ID}}">
-<div class="card" data-grok><h3>Grok bot preset</h3>
-<p>Paste the webhook line as <code>URL KEY</code>. <span class="gh-word">ghook</span> fills the URL and the bearer token.</p>
-<div class="row"><input type="text" data-grok-paste placeholder="https://bot.example.com/hook sk-..." autocomplete="off" spellcheck="false" aria-label="Grok bot URL and key"><button type="button" class="act" data-grok-apply>Fill fields</button></div></div>
-<h3>Endpoint</h3>
 <div class="field"><label for="target-name">Name</label>
-<input id="target-name" name="name" required value="{{.Target.Name}}" placeholder="CFO"></div>
-<div class="field"><label for="target-url">URL</label>
-<input id="target-url" name="url" type="url" required value="{{.Target.URL}}" placeholder="https://bot.example.com/hook"></div>
-<div class="field"><label for="payload_pubkey">Payload public key</label>
-<input id="payload_pubkey" name="payload_pubkey" value="{{.Target.PayloadPubKey}}" placeholder="age1..." spellcheck="false" autocomplete="off">
-<p class="muted">Optional. An <code>age1</code> X25519 recipient. When set, <span class="gh-word">ghook</span> encrypts the outbound body and only the receiver who holds the private key can read it. Leave empty to send JSON in the clear to the webhook.</p></div>
-<div class="field"><label for="target-secret">Secret{{if .Target.HasSecret}} <span class="pill ok">saved</span>{{end}}</label>
-<input id="target-secret" type="password" name="secret" autocomplete="new-password" spellcheck="false" placeholder="{{if .Target.HasSecret}}Leave empty to keep the saved secret{{end}}"></div>
-<label class="check"><input type="checkbox" name="clear_secret" value="1"> Remove the saved secret</label>
-<div class="field"><label for="auth_mode">Auth</label>
+<input id="target-name" name="name" required value="{{.Target.Name}}" placeholder="Finance bot"></div>
+<div class="field"><label for="target-webhook">Webhook{{if .Target.HasSecret}} <span class="pill ok">{{template "lock"}}key saved</span>{{end}}</label>
+<input id="target-webhook" name="webhook" required value="{{.Target.URL}}" placeholder="https://bot.example.com/hook KEY" autocomplete="off" spellcheck="false">
+<p class="muted">Paste the URL, then a space and the key if it came with one. {{if .Target.HasSecret}}Leave the key off to keep the saved one.{{end}}</p></div>
+<details class="more"{{if .More}} open{{end}}>
+<summary><span class="tw-icon" aria-hidden="true"></span>More options</summary>
+<div class="more-body">
+<div class="field"><label for="auth_mode">Send the key as</label>
 <select id="auth_mode" name="auth_mode">
 <option value="bearer" {{if or (eq .Target.AuthMode "") (eq .Target.AuthMode "bearer")}}selected{{end}}>Authorization: Bearer</option>
-<option value="header" {{if eq .Target.AuthMode "header"}}selected{{end}}>Custom header</option>
-<option value="hmac" {{if eq .Target.AuthMode "hmac"}}selected{{end}}>HMAC SHA-256 (X-Ghook-Signature)</option>
+<option value="header" {{if eq .Target.AuthMode "header"}}selected{{end}}>A custom header</option>
+<option value="hmac" {{if eq .Target.AuthMode "hmac"}}selected{{end}}>HMAC signature (X-Ghook-Signature)</option>
 </select></div>
-<div class="field"><label for="auth_header">Custom header name</label>
+<div class="field" data-show-when="auth_mode=header"><label for="auth_header">Header name</label>
 <input id="auth_header" name="auth_header" value="{{.Target.AuthHeader}}" placeholder="X-Api-Key"></div>
-<h3>Delivery</h3>
-<label class="check"><input type="checkbox" name="include_body" value="1" {{if .Target.IncludeBody}}checked{{end}}> Include the plain-text body (off by default; the body is not stored)</label>
-<label class="check"><input type="checkbox" name="paused" value="1" {{if .Target.Paused}}checked{{end}}> Paused</label>
-<div class="field"><label for="quiet_start">Quiet hours start</label>
-<input id="quiet_start" name="quiet_start" value="{{.Target.QuietStart}}" placeholder="22:00"></div>
-<div class="field"><label for="quiet_end">Quiet hours end</label>
-<input id="quiet_end" name="quiet_end" value="{{.Target.QuietEnd}}" placeholder="07:00">
-<p class="muted">Times are in the display timezone. A window that crosses midnight is fine. Mail waits until the window ends.</p></div>
-<div class="field"><label for="digest_at">Digest at</label>
+{{if .Target.HasSecret}}<label class="check"><input type="checkbox" name="clear_secret" value="1"> Remove the saved key</label>{{end}}
+<div class="field"><span class="label">Sending</span>
+<div class="checks">
+<label class="check"><input type="checkbox" name="paused" value="1" {{if .Target.Paused}}checked{{end}}> Paused (mail waits until you resume)</label>
+<label class="check"><input type="checkbox" name="include_body" value="1" {{if .Target.IncludeBody}}checked{{end}}> Include the message body (never stored)</label>
+</div></div>
+<div class="field"><span class="label">Quiet hours</span>
+<div class="fieldrow times"><input id="quiet_start" name="quiet_start" value="{{.Target.QuietStart}}" placeholder="22:00" aria-label="Quiet hours start"><span class="muted">to</span><input id="quiet_end" name="quiet_end" value="{{.Target.QuietEnd}}" placeholder="07:00" aria-label="Quiet hours end"></div>
+<p class="muted">Mail waits until the window ends. Your display timezone.</p></div>
+<div class="field"><label for="digest_at">Daily digest at</label>
 <input id="digest_at" name="digest_at" value="{{.Target.DigestAt}}" placeholder="08:00">
-<p class="muted">Leave empty to send each message. A time batches the day's matches into one POST.</p></div>
-<div class="field"><label for="rate_per_minute">Rate limit (per minute)</label>
+<p class="muted">Empty sends each message. A time sends the day's mail as one batch.</p></div>
+<div class="field"><label for="rate_per_minute">Max per minute</label>
 <input id="rate_per_minute" type="number" name="rate_per_minute" min="0" max="6000" value="{{.Target.RatePerMin}}">
-<p class="muted">0 is unlimited.</p></div>
-<h3>Payload</h3>
-<div class="field"><label for="template">Payload template</label>
-<textarea id="template" name="template" class="wide" rows="6" placeholder="Leave empty for the default JSON.">{{.Target.Template}}</textarea>
+<p class="muted">0 means no limit.</p></div>
+<div class="field"><label for="payload_pubkey">Encrypt to (age key)</label>
+<input id="payload_pubkey" name="payload_pubkey" value="{{.Target.PayloadPubKey}}" placeholder="age1..." spellcheck="false" autocomplete="off">
+<p class="muted">An <code>age1</code> public key. Only its holder can read the body.</p></div>
+<div class="field"><label for="template">Custom payload</label>
+<textarea id="template" name="template" class="wide" rows="6" placeholder="Empty sends the default JSON.">{{.Target.Template}}</textarea>
 <p class="muted">Go template. Fields: Source, Route, Account, MessageID, ThreadID, From, To, Cc, Subject, Date, Labels, Category, Snippet, GmailURL, DeliveryID, Body, BodyText.</p></div>
+</div></details>
 {{if .IsNew}}<div class="row"><button class="btn fill" type="submit">Create</button><a class="act" href="/admin/targets">Cancel</a></div>
 {{else}}<div class="row"><a class="act" href="/admin/targets">Back to targets</a></div>
 {{end}}

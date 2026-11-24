@@ -93,7 +93,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 
 **Target.** A named webhook: a URL and a secret. Auth is Bearer (default), a named header, or HMAC (`X-Ghook-Signature`). Every POST also sends `X-Ghook-Delivery`. On the target form, paste `URL KEY` (one space) and use **Fill fields** for a Grok Bot webhook. A target may also supply an `age1…` public key; ghook then encrypts the outbound body so only the holder of the matching secret can read it.
 
-**Route.** An ordered rule that matches mail and posts to one target. The first match wins unless the route says **continue**. A fallback runs only when nothing else matched, and its filter still applies. Use the simulator against recent mail before you rely on a rule. Sender lists are kept sorted: domains, then `*.` domains, then full addresses. On **routes**, click a value to edit it in place.
+**Route.** An ordered rule that matches mail and posts to one target. The first match wins unless the route says **continue**. A fallback runs only when nothing else matched, and its filter still applies. Turn on **Testing mode** in settings to show the simulator, then try a rule against recent mail before you rely on it. Sender lists are kept sorted: domains, then `*.` domains, then full addresses. On **routes**, click a value to edit it in place. Forms open with only the essentials; the rest is under **More options**, which opens by itself when a route or target already uses one of those fields.
 
 | Field | Match |
 | --- | --- |
@@ -107,7 +107,7 @@ Push mode is optional. Google POSTs to `/hooks/pubsub` with an OIDC JWT. Pull is
 
 **Label convention.** On **settings**, leave the prefix at `ghook` and the convention on. A Gmail label `ghook/CFO` delivers to the target named `CFO` with no route. Existing `Ghook/` labels still match. `ghook/Routed/CFO` is the label ghook writes after a route opts in, and it does not itself route.
 
-**Deliveries.** Each match is an outbox row. Retry keeps the same `X-Ghook-Delivery` id so the receiver can dedupe. Replay mints a new id. The outbox uses exponential backoff. After the attempt limit or the age limit the row is dead. Quiet hours, a digest time, a per-target rate limit, and pause are set on the target. Retry limits are on **settings**.
+**Deliveries.** Each match is an outbox row. Retry keeps the same `X-Ghook-Delivery` id so the receiver can dedupe. Replay (shown in Testing mode) mints a new id. The outbox uses exponential backoff. After the attempt limit or the age limit the row is dead. Quiet hours, a digest time, a per-target rate limit, and pause are set on the target. Retry limits are on **settings**.
 
 The default payload is metadata. No body, no attachments:
 
@@ -221,7 +221,7 @@ Export omits secrets unless you set a passphrase, which seals them in the file. 
 | Pull errors | The service account JSON is the key for the right project, and it has Subscriber on the subscription. |
 | Push returns 401 | The audience must be the push URL. The optional email must be the service account Google signs as. |
 | Deliveries sit in retry | The target URL, the secret, and quiet hours. The delivery page has the status and the redacted request. |
-| A route matches nothing | Run the simulator. An invalid subject regex matches nothing. A fallback only runs when no earlier rule matched. |
+| A route matches nothing | Turn on Testing mode and run the simulator. An invalid subject regex matches nothing. A fallback only runs when no earlier rule matched. |
 | Label `ghook/CFO` did nothing | The convention is on, a target is named `CFO`, and the label is not under `ghook/Routed/`. Existing `Ghook/` labels also match. |
 
 ## License

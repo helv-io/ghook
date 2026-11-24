@@ -90,10 +90,18 @@ type health struct {
 type page struct {
 	Title, Nav, CSRF, User, UserEmail, Version, Public string
 	Solo, Ready                                        bool
-	Banner                                             string
-	Toasts                                             []toast
-	Err                                                string
-	GoogleRedirect, PushURL                            string
+	// Testing shows the simulator and replay controls (Settings > Testing mode).
+	Testing bool
+	// More opens the "More options" section of an edit form.
+	More bool
+	// DBSize and CompactLast describe the instance database on Settings.
+	DBSize                  string
+	CompactLast             time.Time
+	CompactAt               string
+	Banner                  string
+	Toasts                  []toast
+	Err                     string
+	GoogleRedirect, PushURL string
 
 	Accounts      []store.Account
 	HasClient     bool

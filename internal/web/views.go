@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/helv-io/ghook/internal/match"
 	"github.com/helv-io/ghook/internal/store"
 )
 
@@ -125,4 +126,35 @@ func statusClass(status string) string {
 		return "warn"
 	}
 	return "off"
+}
+
+// routeAdvanced reports whether a route uses anything past the essentials
+// (name, senders, target), so its "More options" section opens by itself.
+func routeAdvanced(r store.Route, isNew bool) bool {
+	s := r.Spec.Normalize()
+	return len(s.To) > 0 || len(s.Cc) > 0 || s.Subject != "" || s.Contains != "" ||
+		len(s.Labels) > 0 || len(s.Categories) > 0 || s.Attachment != "" || s.Op == "or" ||
+		r.Fallback || r.Continue || r.ApplyLabel || (!isNew && !r.Enabled)
+}
+
+// targetAdvanced reports whether a target uses anything past a name, a URL and a bearer key.
+func targetAdvanced(t store.Target) bool {
+	return (t.AuthMode != "" && t.AuthMode != "bearer") || t.AuthHeader != "" || t.PayloadPubKey != "" ||
+		t.IncludeBody || t.Paused || t.QuietStart != "" || t.QuietEnd != "" || t.DigestAt != "" ||
+		t.RatePerMin > 0 || strings.TrimSpace(t.Template) != ""
+}
+
+// settingsAdvanced reports whether any setting behind "More options" differs from its default.
+func settingsAdvanced(p page) bool {
+	return p.LabelPrefix != match.DefaultPrefix || !p.LabelConvention || p.Catchup != 30 || p.ResyncDays != 2 ||
+		p.RetryAttempts != 8 || p.RetryHours != 24 || p.RetryBase != 30 || p.Retention != 30 || p.RetainBodies
+}
+
+// splitWebhook reads "URL KEY" (or just a URL) as pasted from a bot's setup screen.
+func splitWebhook(raw string) (u, key string) {
+	f := strings.Fields(raw)
+	if len(f) == 0 {
+		return "", ""
+	}
+	return f[0], strings.Join(f[1:], " ")
 }

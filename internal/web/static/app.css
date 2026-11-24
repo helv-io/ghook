@@ -631,3 +631,18 @@ a.chip:hover{border-color:var(--acc);color:var(--acc);text-decoration:none}
   .filters>label,.fieldrow>label{flex:1 1 40%}
   .handle{min-height:44px}
 }
+
+/* Progressive disclosure: advanced fields sit in a collapsed "More options". */
+details.more{margin:18px 0 8px;border-top:1px solid var(--line,#2a2f3a);padding-top:10px}
+details.more>summary{display:inline-flex;align-items:center;gap:8px;cursor:pointer;list-style:none;color:var(--dim);font-weight:600;padding:6px 0;user-select:none}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary:hover,details.more>summary:focus-visible{color:inherit}
+details.more>summary .tw-icon{display:inline-block;width:0;height:0;border-left:6px solid currentColor;border-top:5px solid transparent;border-bottom:5px solid transparent;transition:transform .15s}
+details.more[open]>summary .tw-icon{transform:rotate(90deg)}
+details.more .more-body{padding-top:6px}
+details.more .more-body>h3:first-child{margin-top:6px}
+.fieldrow.times{align-items:center;flex-wrap:nowrap;margin:0}
+.fieldrow.times input{width:7rem;flex:0 0 auto}
+details.more>summary{text-decoration:none}
+.field[hidden]{display:none}
+.checks[hidden]{display:none}

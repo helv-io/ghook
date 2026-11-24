@@ -108,6 +108,11 @@ There is no Save button on an existing resource. Creation of a new route or targ
 - Placement: bottom-right on desktop, bottom-center below 800px. The stack is `pointer-events:none`; each toast is `auto`. Toasts are non-blocking and must not shift the page layout.
 - `prefers-reduced-motion: reduce` disables the fade.
 
+## Forms
+
+- Edit forms show only the essentials: a route is a name, its senders and a target; a target is a name and one "webhook" box that takes `URL KEY` (the handler splits it; a URL alone keeps the saved key). Everything else sits in `<details class="more">` ("More options"), which opens by itself only when `routeAdvanced`, `targetAdvanced` or `settingsAdvanced` sees a non-default value. Add a new advanced field to the matching helper.
+- Testing mode (`testing_mode` setting, off by default) shows the route simulator and the replay buttons. It hides UI only; the endpoints stay.
+
 ## Database upkeep
 
 - `store.Open` sets pragmas in the DSN (busy_timeout, WAL, `journal_size_limit` 64 MiB, foreign keys) so a reopened connection keeps them. New files use `auto_vacuum=INCREMENTAL`.

@@ -3,8 +3,45 @@
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <form method="post" action="/admin/routes/save" class="form wide"{{if not .IsNew}} data-autosave="/admin/routes/save"{{end}}>
 <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="id" value="{{.Route.ID}}">
-<div class="card" id="simulator">
-<h3>Simulator</h3>
+<div class="field"><label for="route-name">Name</label>
+<input id="route-name" name="name" required value="{{.Route.Name}}" placeholder="invoices"></div>
+<div class="field"><label for="from">From</label>
+<textarea id="from" name="from" rows="3" placeholder="billing@example.com&#10;example.com">{{lines .Route.Spec.From}}</textarea>
+<p class="muted">One sender per line: an address, or a domain (which includes its subdomains). Leave empty to match all mail.</p></div>
+<div class="field"><label for="target_id">Send to</label>
+{{if .Targets}}<select id="target_id" name="target_id">{{range .Targets}}<option value="{{.ID}}" {{if eq .ID $.Route.TargetID}}selected{{end}}>{{.Name}}</option>{{end}}</select>
+{{else}}<p class="muted">No targets yet. <a href="/admin/targets/new">Add a target</a> first, then come back.</p>{{end}}</div>
+<details class="more"{{if .More}} open{{end}}>
+<summary><span class="tw-icon" aria-hidden="true"></span>More options</summary>
+<div class="more-body">
+<div class="field"><label for="to">To</label>
+<textarea id="to" name="to" rows="2" placeholder="team@example.com">{{lines .Route.Spec.To}}</textarea></div>
+<div class="field"><label for="cc">Cc</label>
+<textarea id="cc" name="cc" rows="2" placeholder="ops@example.com">{{lines .Route.Spec.Cc}}</textarea></div>
+<div class="field"><label for="subject">Subject matches</label>
+<input id="subject" name="subject" value="{{.Route.Spec.Subject}}" placeholder="(?i)invoice">
+<p class="muted">A regular expression. <code>(?i)</code> ignores case.</p></div>
+<div class="field"><label for="contains">Body contains</label>
+<input id="contains" name="contains" value="{{.Route.Spec.Contains}}"></div>
+<div class="field"><label for="labels">Gmail labels</label>
+<textarea id="labels" name="labels" rows="2" placeholder="INBOX">{{lines .Route.Spec.Labels}}</textarea></div>
+<div class="field"><span class="label">Category</span>
+<div class="checks">{{range .Categories}}<label class="check"><input type="checkbox" name="category" value="{{.}}" {{if has $.Route.Spec.Categories .}}checked{{end}}>{{.}}</label>{{end}}</div></div>
+<div class="field"><label for="attachment">Attachment</label>
+<select id="attachment" name="attachment"><option value="" {{if eq .Route.Spec.Attachment ""}}selected{{end}}>any</option><option value="yes" {{if eq .Route.Spec.Attachment "yes"}}selected{{end}}>has an attachment</option><option value="no" {{if eq .Route.Spec.Attachment "no"}}selected{{end}}>no attachment</option></select></div>
+<div class="field"><label for="op">When several fields are set</label>
+<select id="op" name="op"><option value="and" {{if ne .Route.Spec.Op "or"}}selected{{end}}>all must match</option><option value="or" {{if eq .Route.Spec.Op "or"}}selected{{end}}>any may match</option></select>
+<p class="muted">Within one field, any line matches. <code>*.example.com</code> means subdomains only.</p></div>
+<div class="field"><span class="label">Behavior</span>
+<div class="checks">
+<label class="check"><input type="checkbox" name="enabled" value="1" {{if or .IsNew .Route.Enabled}}checked{{end}}> On</label>
+<label class="check"><input type="checkbox" name="continue" value="1" {{if .Route.Continue}}checked{{end}}> Keep checking later routes after this one matches</label>
+<label class="check"><input type="checkbox" name="fallback" value="1" {{if .Route.Fallback}}checked{{end}}> Only when no other route matched</label>
+<label class="check"><input type="checkbox" name="apply_label" value="1" {{if .Route.ApplyLabel}}checked{{end}}> Label the message {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}} in Gmail</label>
+</div></div>
+</div></details>
+{{if or .Testing .Previews}}<div class="card" id="simulator">
+<h3>Simulator <span class="pill">testing</span></h3>
 <p>Runs this draft against the last stored messages, including the label convention. Body text is fetched live when the mailbox is connected and is not kept.</p>
 <div class="row">
 <button class="act" type="submit" formaction="/admin/routes/preview">Simulate this draft</button>
@@ -13,40 +50,7 @@
 {{if .Previews}}<div class="tablewrap"><table class="table"><thead><tr><th>From</th><th>Subject</th><th>Would hit</th></tr></thead><tbody>
 {{range .Previews}}<tr><td data-label="From">{{.From}}</td><td class="wrap" data-label="Subject">{{.Subject}}</td><td data-label="Would hit">{{if .Route}}<span class="pill ok">{{.Route}}</span>{{else}}<span class="pill off">no route</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>{{end}}
-</div>
-<h3>Route</h3>
-<div class="field"><label for="route-name">Name</label>
-<input id="route-name" name="name" required value="{{.Route.Name}}"></div>
-<div class="field"><label for="target_id">Target</label>
-<select id="target_id" name="target_id">{{range .Targets}}<option value="{{.ID}}" {{if eq .ID $.Route.TargetID}}selected{{end}}>{{.Name}}</option>{{end}}</select></div>
-<div class="field"><span class="label">Options</span>
-<div class="checks">
-<label class="check"><input type="checkbox" name="enabled" value="1" {{if or .IsNew .Route.Enabled}}checked{{end}}> Enabled</label>
-<label class="check"><input type="checkbox" name="fallback" value="1" {{if .Route.Fallback}}checked{{end}}> Fallback (only when nothing else matched)</label>
-<label class="check"><input type="checkbox" name="continue" value="1" {{if .Route.Continue}}checked{{end}}> Continue to later rules after a match</label>
-<label class="check"><input type="checkbox" name="apply_label" value="1" {{if .Route.ApplyLabel}}checked{{end}}> Apply {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}} (needs gmail.modify)</label>
-</div></div>
-<h3>Filter</h3>
-<div class="field"><label for="op">Combine fields</label>
-<select id="op" name="op"><option value="and" {{if ne .Route.Spec.Op "or"}}selected{{end}}>AND</option><option value="or" {{if eq .Route.Spec.Op "or"}}selected{{end}}>OR</option></select>
-<p class="muted">Lists inside one field are OR (any sender, any label). An empty filter matches every message.</p></div>
-<div class="field"><label for="from">From</label>
-<textarea id="from" name="from" rows="3" placeholder="ada@example.com&#10;*.capitalone.com">{{lines .Route.Spec.From}}</textarea>
-<p class="muted">Address, domain, or wildcard, one per line. <code>example.com</code> is the apex and every subdomain; <code>*.capitalone.com</code> is subdomains only.</p></div>
-<div class="field"><label for="to">To</label>
-<textarea id="to" name="to" rows="2" placeholder="ceo@example.com">{{lines .Route.Spec.To}}</textarea></div>
-<div class="field"><label for="cc">Cc</label>
-<textarea id="cc" name="cc" rows="2" placeholder="ops@example.com">{{lines .Route.Spec.Cc}}</textarea></div>
-<div class="field"><label for="subject">Subject regex</label>
-<input id="subject" name="subject" value="{{.Route.Spec.Subject}}" placeholder="(?i)invoice"></div>
-<div class="field"><label for="contains">Body or snippet contains</label>
-<input id="contains" name="contains" value="{{.Route.Spec.Contains}}"></div>
-<div class="field"><label for="labels">Gmail labels</label>
-<textarea id="labels" name="labels" rows="2" placeholder="INBOX">{{lines .Route.Spec.Labels}}</textarea></div>
-<div class="field"><span class="label">Category</span>
-<div class="checks">{{range .Categories}}<label class="check"><input type="checkbox" name="category" value="{{.}}" {{if has $.Route.Spec.Categories .}}checked{{end}}>{{.}}</label>{{end}}</div></div>
-<div class="field"><label for="attachment">Attachment</label>
-<select id="attachment" name="attachment"><option value="" {{if eq .Route.Spec.Attachment ""}}selected{{end}}>any</option><option value="yes" {{if eq .Route.Spec.Attachment "yes"}}selected{{end}}>has an attachment</option><option value="no" {{if eq .Route.Spec.Attachment "no"}}selected{{end}}>no attachment</option></select></div>
+</div>{{end}}
 {{if .IsNew}}<div class="row"><button class="btn fill" type="submit">Create</button>
 <a class="act" href="/admin/routes">Cancel</a></div>{{else}}<div class="row"><a class="act" href="/admin/routes">Back to routes</a></div>{{end}}
 </form>

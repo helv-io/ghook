@@ -1,6 +1,6 @@
 {{define "body"}}
 <div class="row spread"><h2>Routes</h2><a class="btn" href="/admin/routes/new">Add route</a></div>
-<p>First match wins unless the route says continue. A fallback runs only when nothing else matched, and it still has a filter. Drag a row by its handle, or focus it and press Alt+arrow. Click a value to edit it.</p>
+<p>Each new email goes to the first route it matches, top to bottom. Drag to reorder; click a value to edit it.</p>
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <div class="filter"><input type="search" data-search data-filter="#routes" placeholder="Filter routes" aria-label="Filter routes"></div>
 <div class="card flush tablewrap"><table class="table routes" id="routes" data-reorder="/admin/routes/reorder" data-field-url="/admin/routes/field">
@@ -14,10 +14,10 @@
 <form method="post" action="/admin/routes/move"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="dir" value="up"><button class="act small" type="submit" aria-label="Move {{.Name}} up">Up</button></form>
 <form method="post" action="/admin/routes/move"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="dir" value="down"><button class="act small" type="submit" aria-label="Move {{.Name}} down">Down</button></form>
 <form method="post" action="/admin/routes/delete" data-confirm="Delete route {{.Name}}?" data-confirm-danger="1"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act danger small" type="submit">Delete</button></form>
-</div></td></tr>{{else}}<tr><td class="empty" colspan="5">No routes yet. The fallback you want for important mail is a route marked fallback, for example category Primary, aimed at the catch-all target.</td></tr>{{end}}</tbody>
+</div></td></tr>{{else}}<tr><td class="empty" colspan="5">No routes yet. A route says which senders go to which target. {{if .Targets}}<a href="/admin/routes/new">Add your first route</a>.{{else}}Start by <a href="/admin/targets/new">adding a target</a>.{{end}}</td></tr>{{end}}</tbody>
 </table></div>
 
-<div class="card"><h3>Simulator</h3>
+{{if or .Testing .Previews}}<div class="card"><h3>Simulator <span class="pill">testing</span></h3>
 <p>Runs the saved rules against the last stored messages. Body text is fetched live when the mailbox is connected and is not kept.</p>
 <form method="post" action="/admin/routes/simulate" class="row">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -28,4 +28,5 @@
 {{range .Previews}}<tr><td class="clip" data-label="From">{{template "sender" .From}}</td><td class="wrap" data-label="Subject">{{.Subject}}</td><td class="nw" data-label="Would hit">{{if .Route}}<span class="pill ok">{{.Route}}</span>{{else}}<span class="pill off">no route</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>{{end}}
 </div>
+{{end}}
 {{end}}

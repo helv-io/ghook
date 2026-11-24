@@ -114,20 +114,15 @@ document.addEventListener("submit", function (e) {
 });
 
 (function () {
-  var box = document.querySelector("[data-grok]");
-  if (!box) return;
-  var btn = box.querySelector("[data-grok-apply]");
-  var input = box.querySelector("[data-grok-paste]");
-  btn.addEventListener("click", function () {
-    var parts = input.value.trim().split(/\s+/);
-    if (parts.length < 2) { toast("Paste the URL and the key, separated by a space", {kind:"info"}); return; }
-    var form = box.closest("form");
-    form.querySelector("[name=url]").value = parts[0];
-    form.querySelector("[name=secret]").value = parts.slice(1).join(" ");
-    var mode = form.querySelector("[name=auth_mode]");
-    if (mode) mode.value = "bearer";
-    toast("URL and key filled in.", {kind:"success"});
-    if (form.hasAttribute("data-autosave") && window.ghookAutosave) window.ghookAutosave(form);
+  // A field marked data-show-when="name=value" shows only while that control has that value.
+  [].forEach.call(document.querySelectorAll("[data-show-when]"), function (el) {
+    var m = /^([\w-]+)(!?=)(.*)$/.exec(el.getAttribute("data-show-when"));
+    var form = el.closest("form");
+    var ctl = m && form && form.querySelector("[name=" + m[1] + "]");
+    if (!ctl) return;
+    function sync() { el.hidden = (ctl.value === m[3]) === (m[2] === "!="); }
+    ctl.addEventListener("change", sync);
+    sync();
   });
 })();
 
