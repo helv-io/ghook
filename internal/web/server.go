@@ -168,8 +168,9 @@ func New(rt *runtime.App) (*Server, error) {
 
 func (s *Server) funcs() template.FuncMap {
 	return template.FuncMap{
-		"wordmark": wordmark,
-		"pathcode": pathcode,
+		"wordmark":        wordmark,
+		"subjectExamples": func() []match.Example { return match.SubjectExamples },
+		"pathcode":        pathcode,
 		"scopes": func(raw string) []string {
 			var out []string
 			for _, p := range strings.Fields(raw) {
