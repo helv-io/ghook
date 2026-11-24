@@ -2,15 +2,18 @@
 <div class="row spread"><h2>Targets</h2><a class="btn" href="/admin/targets/new">Add target</a></div>
 <p>A target is a named webhook. Pause stops new sends and holds the queue. Test sends one sample and records it in the delivery log.</p>
 <div class="filter"><input type="search" data-search data-filter="#targets" placeholder="Filter targets" aria-label="Filter targets"></div>
-<div class="card flush tablewrap"><table class="table" id="targets">
-<thead><tr><th>Name</th><th>URL</th><th>Auth</th><th></th></tr></thead>
-<tbody>{{range .Targets}}<tr>
-<td class="primary" data-label="Name"><a class="name" href="/admin/targets/{{.ID}}"><code>{{.Name}}</code></a>{{if .Paused}} <span class="pill warn">paused</span>{{end}}{{if .DigestAt}} <span class="pill">digest {{.DigestAt}}</span>{{end}}{{if .QuietStart}} <span class="pill">quiet {{.QuietStart}}–{{.QuietEnd}}</span>{{end}}</td>
-<td class="trunc" data-label="URL">{{pathcode .URL}}</td>
-<td data-label="Auth">{{.AuthMode}}{{if .HasSecret}} <span class="pill ok">secret</span>{{else}} <span class="pill off">no secret</span>{{end}}</td>
+<div class="card flush tablewrap"><table class="table targets" id="targets">
+<thead><tr><th>Name</th><th>Destination</th><th>Routes</th><th>Last delivery</th><th>Auth</th><th class="actions-th"></th></tr></thead>
+<tbody>{{range .TargetRows}}<tr>
+<td class="primary" data-label="Name"><a class="name" href="/admin/targets/{{.ID}}"><code>{{.Name}}</code></a> {{if .Paused}}<span class="pill warn">paused</span>{{else}}<span class="pill ok">active</span>{{end}}{{if .DigestAt}} <span class="pill">digest {{.DigestAt}}</span>{{end}}{{if .QuietStart}} <span class="pill">quiet {{.QuietStart}}–{{.QuietEnd}}</span>{{end}}</td>
+<td class="dest-cell" data-label="Destination"><div class="dest" title="{{.URL}}"><span class="dest-label">{{.Dest.Label}}</span>
+<span class="dest-sub">{{if .Dest.ID}}<span class="mono">{{.Dest.ID}}</span>{{else if ne .Dest.Label .Dest.Host}}<span class="mono">{{.Dest.Host}}</span>{{end}}<button type="button" class="act small copy" data-copy-text="{{.URL}}" aria-label="Copy the URL of {{.Name}}">Copy URL</button></span></div></td>
+<td class="feeds" data-label="Routes">{{if .Routes}}<span class="chips">{{range .Routes}}<a class="chip" href="/admin/routes/{{.ID}}">{{.Name}}</a>{{end}}</span>{{else}}<span class="muted">none</span>{{end}}</td>
+<td class="nw" data-label="Last delivery">{{if .HasLast}}<a class="lastdel" href="/admin/deliveries/{{.Last.ID}}"><span class="pill {{statusClass .Last.Status}}">{{.Last.Status}}</span> {{template "when" .Last.CreatedAt}}</a>{{else}}<span class="muted">never</span>{{end}}</td>
+<td class="nw" data-label="Auth">{{if .HasSecret}}<span class="pill ok" title="Secret saved">{{template "lock"}}{{authLabel .AuthMode}}</span>{{else}}<span class="pill warn" title="No secret saved">{{authLabel .AuthMode}} · no secret</span>{{end}}</td>
 <td class="actions-cell"><div class="actions">
-<form method="post" action="/admin/targets/pause"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="paused" value="{{if .Paused}}0{{else}}1{{end}}"><button class="act" type="submit">{{if .Paused}}Resume{{else}}Pause{{end}}</button></form>
-<form method="post" action="/admin/targets/test"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act" type="submit">Test</button></form>
-</div></td></tr>{{else}}<tr><td class="empty" colspan="4">No targets yet.</td></tr>{{end}}</tbody>
+<form method="post" action="/admin/targets/pause"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="paused" value="{{if .Paused}}0{{else}}1{{end}}"><button class="act small" type="submit">{{if .Paused}}Resume{{else}}Pause{{end}}</button></form>
+<form method="post" action="/admin/targets/test"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Test</button></form>
+</div></td></tr>{{else}}<tr><td class="empty" colspan="6">No targets yet.</td></tr>{{end}}</tbody>
 </table></div>
 {{end}}

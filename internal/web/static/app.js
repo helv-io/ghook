@@ -1,3 +1,5 @@
+document.documentElement.classList.add("js");
+
 (function () {
   var bar = document.querySelector("header[data-nav]");
   if (!bar) return;
@@ -133,6 +135,7 @@ document.addEventListener("submit", function (e) {
   var table = document.querySelector("[data-reorder]");
   if (!table) return;
   var drag = null;
+  var start = "";
   function ids() {
     return [].map.call(table.querySelectorAll("tbody tr[data-id]"), function (tr) { return tr.getAttribute("data-id"); });
   }
@@ -144,32 +147,53 @@ document.addEventListener("submit", function (e) {
       .then(function (r) { if (!r.ok) throw new Error("save"); toast("Saved", {kind:"success", duration:1000}); })
       .catch(function () { toast("Could not save the order", {kind:"error"}); });
   }
+  // Only the handle starts a drag, so text in the row (and the inline editors) stays selectable.
+  table.addEventListener("pointerdown", function (e) {
+    var h = e.target.closest("[data-handle]");
+    var tr = h && h.closest("tr[data-id]");
+    if (tr) tr.setAttribute("draggable", "true");
+  });
+  document.addEventListener("pointerup", function () {
+    table.querySelectorAll("tr[draggable]").forEach(function (tr) { if (tr !== drag) tr.removeAttribute("draggable"); });
+  });
   table.addEventListener("dragstart", function (e) {
-    var tr = e.target.closest("tr[data-id]");
-    if (!tr) return;
+    var tr = e.target.closest && e.target.closest("tr[data-id]");
+    if (!tr || !tr.hasAttribute("draggable")) { e.preventDefault(); return; }
     drag = tr;
+    start = ids().join();
     tr.classList.add("dragging");
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", tr.getAttribute("data-id"));
   });
-  table.addEventListener("dragend", function () { if (drag) drag.classList.remove("dragging"); drag = null; });
+  // Save when the drag ends and the order changed, wherever the row was let go.
+  table.addEventListener("dragend", function () {
+    if (!drag) return;
+    drag.classList.remove("dragging");
+    drag.removeAttribute("draggable");
+    drag = null;
+    if (ids().join() !== start) save();
+  });
   table.addEventListener("dragover", function (e) {
-    var tr = e.target.closest("tr[data-id]");
-    if (!tr || !drag || tr === drag) return;
+    if (!drag) return;
     e.preventDefault();
+    var tr = e.target.closest("tr[data-id]");
+    if (!tr || tr === drag) return;
     var after = e.clientY > tr.getBoundingClientRect().top + tr.getBoundingClientRect().height / 2;
     tr.parentNode.insertBefore(drag, after ? tr.nextSibling : tr);
   });
-  table.addEventListener("drop", function (e) { e.preventDefault(); save(); });
+  table.addEventListener("drop", function (e) { if (drag) e.preventDefault(); });
   document.addEventListener("keydown", function (e) {
     if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    if (e.target && e.target.matches && e.target.matches("input, textarea, select")) return;
     var tr = document.activeElement && document.activeElement.closest ? document.activeElement.closest("tr[data-id]") : null;
     if (!tr || !table.contains(tr)) return;
     e.preventDefault();
     var sib = e.key === "ArrowUp" ? tr.previousElementSibling : tr.nextElementSibling;
     if (!sib || !sib.getAttribute || !sib.getAttribute("data-id")) return;
+    var keep = document.activeElement;
     if (e.key === "ArrowUp") tr.parentNode.insertBefore(tr, sib);
     else tr.parentNode.insertBefore(sib, tr);
+    if (keep && keep.focus) keep.focus();
     save();
   });
 })();
@@ -354,3 +378,184 @@ document.querySelectorAll("[data-filter]").forEach(function (input) {
     });
   });
 })();
+
+// Route list: each filter value is a chip; click to edit it in place, "+ add" appends one.
+// Enter or blur saves the whole field through /admin/routes/field and redraws it as stored
+// (sorted, deduped). Escape cancels. An emptied value is removed.
+(function () {
+  var table = document.querySelector("[data-field-url]");
+  if (!table) return;
+  var url = table.getAttribute("data-field-url");
+  var KEEP = 3;
+
+  function values(sec, skip) {
+    var out = [];
+    sec.querySelectorAll(".mvals li").forEach(function (li) {
+      if (li === skip || li.classList.contains("addli")) return;
+      var b = li.querySelector("[data-edit]");
+      if (b) out.push(b.textContent);
+    });
+    return out;
+  }
+
+  function chip(sec, v, i) {
+    var li = document.createElement("li");
+    if (i >= KEEP) li.className = "extra";
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "mval" + (sec.getAttribute("data-kind") === "regex" ? " re" : "");
+    b.setAttribute("data-edit", "");
+    b.title = v;
+    b.textContent = v;
+    li.appendChild(b);
+    return li;
+  }
+
+  function draw(sec, vals) {
+    var ul = sec.querySelector(".mvals");
+    var add = ul.querySelector(".addli");
+    ul.querySelectorAll("li:not(.addli)").forEach(function (li) { li.remove(); });
+    vals.forEach(function (v, i) { ul.insertBefore(chip(sec, v, i), add); });
+    sec.classList.toggle("any", vals.length > 1);
+    var head = sec.querySelector(".msec-head");
+    var op = head.querySelector(".msec-op");
+    if (vals.length > 1) {
+      if (!op) { op = document.createElement("span"); op.className = "msec-op"; op.title = "Any one of these matches"; head.appendChild(op); }
+      op.textContent = "any of " + vals.length;
+    } else if (op) op.remove();
+    recount(sec.closest("[data-match]"));
+  }
+
+  function recount(box) {
+    var hidden = 0;
+    box.querySelectorAll(".msec").forEach(function (sec) {
+      var n = sec.querySelectorAll(".mvals li:not(.addli)").length;
+      if (n > KEEP) hidden += n - KEEP;
+    });
+    var tw = box.querySelector("[data-twistie]");
+    if (!tw) {
+      if (!hidden) return;
+      tw = document.createElement("button");
+      tw.type = "button";
+      tw.className = "twistie";
+      tw.setAttribute("data-twistie", "");
+      tw.setAttribute("aria-expanded", box.classList.contains("collapsed") ? "false" : "true");
+      tw.innerHTML = '<span class="tw-icon" aria-hidden="true"></span><span data-twistie-text></span>';
+      box.appendChild(tw);
+    }
+    tw.hidden = !hidden;
+    tw.setAttribute("data-more", hidden);
+    label(box, tw);
+  }
+
+  function label(box, tw) {
+    var open = !box.classList.contains("collapsed");
+    tw.setAttribute("aria-expanded", open ? "true" : "false");
+    tw.querySelector("[data-twistie-text]").textContent = open ? "Show less" : tw.getAttribute("data-more") + " more";
+  }
+
+  function commit(sec, li, input, original) {
+    if (input.getAttribute("data-done")) return;
+    input.setAttribute("data-done", "1");
+    var v = input.value.trim();
+    if (v === (original || "")) { restore(sec, li, original); return; }
+    var others = values(sec, li);
+    var vals = v ? others.concat([v]) : others;
+    var before = original === null ? others : others.concat([original]);
+    var fd = new FormData();
+    fd.set("csrf", document.body.getAttribute("data-csrf") || "");
+    fd.set("id", sec.closest("[data-match]").getAttribute("data-match"));
+    fd.set("field", sec.getAttribute("data-field"));
+    fd.set("value", vals.join("\n"));
+    input.classList.add("busy");
+    input.disabled = true;
+    fetch(url, { method: "POST", body: fd, credentials: "same-origin", headers: { "Accept": "application/json", "X-Requested-With": "fetch" } })
+      .then(function (r) { return r.json().then(function (j) { return { r: r, j: j }; }, function () { return { r: r, j: {} }; }); })
+      .then(function (x) {
+        if (!x.r.ok || !x.j.ok) throw new Error(x.j.error || "Could not save.");
+        var got = x.j.values || [];
+        // the last value of a field went: the cell's sections change, so redraw the page
+        if (!got.length) { location.reload(); return; }
+        draw(sec, got);
+        toast("Saved", { kind: "success", duration: 1000 });
+        var add = original === null && sec.querySelector("[data-add]");
+        if (add) add.focus();
+      })
+      .catch(function (err) {
+        toast(err.message || "Could not save.", { kind: "error" });
+        draw(sec, before);
+      });
+  }
+
+  function restore(sec, li, original) {
+    if (original === null) { li.remove(); var a = sec.querySelector("[data-add]"); if (a) a.focus(); return; }
+    var b = chip(sec, original, 0).firstChild;
+    li.innerHTML = "";
+    li.appendChild(b);
+    b.focus();
+  }
+
+  function edit(sec, li, original) {
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "mval-input";
+    input.value = original || "";
+    input.setAttribute("aria-label", sec.getAttribute("aria-label") + (original === null ? ", new value" : ""));
+    input.setAttribute("spellcheck", "false");
+    input.setAttribute("autocomplete", "off");
+    li.innerHTML = "";
+    li.appendChild(input);
+    input.focus();
+    if (original) input.select();
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); commit(sec, li, input, original); }
+      else if (e.key === "Escape") { e.preventDefault(); input.setAttribute("data-done", "1"); restore(sec, li, original); }
+    });
+    input.addEventListener("blur", function () { commit(sec, li, input, original); });
+  }
+
+  table.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-edit]");
+    if (b) {
+      var sec = b.closest(".msec");
+      edit(sec, b.closest("li"), b.textContent);
+      return;
+    }
+    var a = e.target.closest("[data-add]");
+    if (a) {
+      var sec2 = a.closest(".msec");
+      var box = sec2.closest("[data-match]");
+      box.classList.remove("collapsed");
+      var tw = box.querySelector("[data-twistie]");
+      if (tw) label(box, tw);
+      var li = document.createElement("li");
+      sec2.querySelector(".mvals").insertBefore(li, a.closest("li"));
+      edit(sec2, li, null);
+      return;
+    }
+    var t = e.target.closest("[data-twistie]");
+    if (t) {
+      var bx = t.closest("[data-match]");
+      bx.classList.toggle("collapsed");
+      label(bx, t);
+      try {
+        var k = "ghook.match.open." + bx.getAttribute("data-match");
+        if (bx.classList.contains("collapsed")) localStorage.removeItem(k); else localStorage.setItem(k, "1");
+      } catch (err) {}
+    }
+  });
+
+  table.querySelectorAll("[data-match]").forEach(function (box) {
+    var tw = box.querySelector("[data-twistie]");
+    if (!tw) return;
+    try { if (localStorage.getItem("ghook.match.open." + box.getAttribute("data-match"))) box.classList.remove("collapsed"); } catch (err) {}
+    label(box, tw);
+  });
+})();
+
+// GET filter forms apply as soon as a select changes.
+document.querySelectorAll("form[data-autosubmit]").forEach(function (f) {
+  f.querySelectorAll("select").forEach(function (el) {
+    el.addEventListener("change", function () { f.submit(); });
+  });
+});

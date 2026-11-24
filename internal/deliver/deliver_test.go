@@ -245,6 +245,9 @@ func TestPauseQuietHoursDigestAndRate(t *testing.T) {
 	_, _ = db.QueueAndAdvance(acc.ID, acc.Email, mail.Message{ID: "mr2", From: "a@example.com", Subject: "r2", Date: time.Now().UTC()}, []store.MatchPlan{{
 		RouteKey: "route:r2", RouteName: "inbox", TargetID: fast.ID, TargetName: fast.Name,
 	}}, "")
+	// The rows were queued at the wall clock. Make them due on the fake clock, or the
+	// test fails once the fixed date above is in the past.
+	_, _ = db.SQL.Exec(`UPDATE deliveries SET next_attempt=? WHERE target_name='fast'`, at.Unix())
 	w.Step(context.Background())
 	if len(s.bodies) != 2 {
 		t.Fatalf("rate limit sent extra, bodies=%d", len(s.bodies))

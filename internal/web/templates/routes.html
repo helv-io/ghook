@@ -1,15 +1,15 @@
 {{define "body"}}
 <div class="row spread"><h2>Routes</h2><a class="btn" href="/admin/routes/new">Add route</a></div>
-<p>First match wins unless the route says continue. A fallback runs only when nothing else matched, and it still has a filter. Drag a row, or focus it and press Alt+arrow.</p>
+<p>First match wins unless the route says continue. A fallback runs only when nothing else matched, and it still has a filter. Drag a row by its handle, or focus it and press Alt+arrow. Click a value to edit it.</p>
 {{if .Err}}<div class="callout bad">{{wordmark .Err}}</div>{{end}}
 <div class="filter"><input type="search" data-search data-filter="#routes" placeholder="Filter routes" aria-label="Filter routes"></div>
-<div class="card flush tablewrap"><table class="table" id="routes" data-reorder="/admin/routes/reorder">
-<thead><tr><th></th><th>Name</th><th>Match</th><th>Target</th><th></th></tr></thead>
-<tbody>{{range .Routes}}<tr draggable="true" data-id="{{.ID}}">
-<td data-label=""><span class="handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span></td>
+<div class="card flush tablewrap"><table class="table routes" id="routes" data-reorder="/admin/routes/reorder" data-field-url="/admin/routes/field">
+<thead><tr><th class="handle-th"><span class="offscreen">Order</span></th><th>Name</th><th>Match</th><th>Target</th><th class="actions-th"></th></tr></thead>
+<tbody>{{range .Routes}}<tr data-id="{{.ID}}">
+<td class="handle-cell"><button type="button" class="handle" data-handle title="Drag to reorder" aria-label="Reorder {{.Name}}. Alt+arrow moves it"><span class="grip" aria-hidden="true"></span></button></td>
 <td class="primary" data-label="Name"><a class="name" href="/admin/routes/{{.ID}}"><code>{{.Name}}</code></a>{{if not .Enabled}} <span class="pill off">off</span>{{end}}{{if .Fallback}} <span class="pill warn">fallback</span>{{end}}{{if .Continue}} <span class="pill">continue</span>{{end}}</td>
-<td class="wrap" data-label="Match">{{summary .Spec}}</td>
-<td data-label="Target"><code>{{.TargetName}}</code></td>
+<td class="match" data-label="Match">{{template "matchcell" .}}</td>
+<td class="nw" data-label="Target"><code>{{.TargetName}}</code></td>
 <td class="actions-cell"><div class="actions">
 <form method="post" action="/admin/routes/move"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="dir" value="up"><button class="act small" type="submit" aria-label="Move {{.Name}} up">Up</button></form>
 <form method="post" action="/admin/routes/move"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="dir" value="down"><button class="act small" type="submit" aria-label="Move {{.Name}} down">Down</button></form>
@@ -25,7 +25,7 @@
 <button class="btn" type="submit">Run simulator</button>
 </form>
 {{if .Previews}}<div class="tablewrap"><table class="table"><thead><tr><th>From</th><th>Subject</th><th>Would hit</th></tr></thead><tbody>
-{{range .Previews}}<tr><td data-label="From">{{.From}}</td><td class="wrap" data-label="Subject">{{.Subject}}</td><td data-label="Would hit">{{if .Route}}<span class="pill ok">{{.Route}}</span>{{else}}<span class="pill off">no route</span>{{end}}</td></tr>{{end}}
+{{range .Previews}}<tr><td class="clip" data-label="From">{{template "sender" .From}}</td><td class="wrap" data-label="Subject">{{.Subject}}</td><td class="nw" data-label="Would hit">{{if .Route}}<span class="pill ok">{{.Route}}</span>{{else}}<span class="pill off">no route</span>{{end}}</td></tr>{{end}}
 </tbody></table></div>{{end}}
 </div>
 {{end}}

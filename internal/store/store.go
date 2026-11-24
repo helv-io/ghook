@@ -1595,3 +1595,27 @@ func newKey() string {
 	_, _ = rand.Read(b)
 	return "gh_" + base64.RawURLEncoding.EncodeToString(b)
 }
+
+// LastDeliveries returns the newest delivery for each target, keyed by target id.
+func (d *DB) LastDeliveries() (map[int64]Delivery, error) {
+	inner := `SELECT MAX(id) FROM deliveries`
+	var args []any
+	if !d.all {
+		inner += ` WHERE user_id=?`
+		args = append(args, d.uid)
+	}
+	inner += ` GROUP BY target_id`
+	rows, err := d.SQL.Query(`SELECT `+delCols+` FROM deliveries WHERE id IN (`+inner+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	list, err := collectDel(rows)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]Delivery, len(list))
+	for _, x := range list {
+		out[x.TargetID] = x
+	}
+	return out, nil
+}

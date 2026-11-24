@@ -1,20 +1,21 @@
 {{define "body"}}
 <h2>Deliveries</h2>
-<form method="get" action="/admin/deliveries" class="row">
+<form method="get" action="/admin/deliveries" class="filters" data-autosubmit>
 <label>Status<select name="status"><option value="">any</option>{{range .Statuses}}<option value="{{.}}" {{if eq . $.FilterStatus}}selected{{end}}>{{.}}</option>{{end}}</select></label>
-<label>Route<input name="route" value="{{.FilterRoute}}"></label>
-<label>Target<input name="target" value="{{.FilterTarget}}"></label>
-<button class="act" type="submit">Filter</button>
+<label>Route<select name="route"><option value="">any</option>{{range .RouteNames}}<option value="{{.}}" {{if eq . $.FilterRoute}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+<label>Target<select name="target"><option value="">any</option>{{range .TargetNames}}<option value="{{.}}" {{if eq . $.FilterTarget}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+<button class="act" type="submit" data-nojs>Filter</button>
+{{if or .FilterStatus .FilterRoute .FilterTarget}}<a class="act" href="/admin/deliveries">Clear</a>{{end}}
 </form>
-<div class="card flush tablewrap"><table class="table">
-<thead><tr><th>When</th><th>Route</th><th>Target</th><th>From</th><th>Subject</th><th>Status</th><th></th></tr></thead>
+<div class="card flush tablewrap"><table class="table deliveries">
+<thead><tr><th>When</th><th>Route</th><th>Target</th><th>From</th><th>Subject</th><th>Status</th><th class="actions-th"></th></tr></thead>
 <tbody>{{range .Deliveries}}<tr>
-<td data-label="When">{{when .CreatedAt}}</td>
-<td data-label="Route">{{.RouteName}}</td>
-<td data-label="Target"><code>{{.TargetName}}</code></td>
-<td data-label="From">{{if .From}}{{.From}}{{else}}—{{end}}</td>
-<td class="wrap" data-label="Subject"><a href="/admin/deliveries/{{.ID}}">{{if .Subject}}{{.Subject}}{{else}}(no subject){{end}}</a><span class="sub mono">{{.GmailID}}</span></td>
-<td class="status" data-label="Status"><span class="pill {{if eq .Status "sent"}}ok{{else if eq .Status "dead"}}bad{{else if eq .Status "retry"}}warn{{else}}off{{end}}">{{.Status}}</span>{{if .Attempts}} <span class="muted">{{.Attempts}}</span>{{end}}</td>
+<td class="nw" data-label="When">{{template "when" .CreatedAt}}</td>
+<td class="nw" data-label="Route">{{if .RouteName}}<span class="chip">{{.RouteName}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+<td class="nw" data-label="Target"><code>{{.TargetName}}</code></td>
+<td class="clip" data-label="From">{{template "sender" .From}}</td>
+<td class="wrap" data-label="Subject"><div><a href="/admin/deliveries/{{.ID}}">{{if .Subject}}{{.Subject}}{{else}}(no subject){{end}}</a><span class="sub mono">{{.GmailID}}</span></div></td>
+<td class="nw" data-label="Status"><span class="pill {{statusClass .Status}}"{{if .LastError}} title="{{.LastError}}"{{end}}>{{.Status}}{{if .Attempts}} · {{.Attempts}}{{end}}</span></td>
 <td class="actions-cell"><div class="actions">
 {{if or (eq .Status "dead") (eq .Status "retry")}}<form method="post" action="/admin/deliveries/retry"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Retry</button></form>{{end}}
 {{if or (eq .Status "sent") (eq .Status "dead") (eq .Status "retry")}}<form method="post" action="/admin/deliveries/replay"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act small" type="submit">Replay</button></form>{{end}}
@@ -22,16 +23,12 @@
 </table></div>
 <div class="card"><h3>Replay a window</h3>
 <p>Re-queue every sent, dead or retrying delivery in the window. Each one gets a new <code>X-Ghook-Delivery</code> id. Retry on a single row keeps the same id.</p>
-<form method="post" action="/admin/deliveries/window" class="form">
+<form method="post" action="/admin/deliveries/window" class="fieldrow">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
-<div class="field"><label for="win-route">Route name</label>
-<input id="win-route" name="route" placeholder="optional"></div>
-<div class="field"><label for="win-target">Target name</label>
-<input id="win-target" name="target" placeholder="optional"></div>
-<div class="field"><label for="win-since">Since</label>
-<input id="win-since" name="since" placeholder="2026-01-01 or RFC3339"></div>
-<div class="field"><label for="win-until">Until</label>
-<input id="win-until" name="until" placeholder="optional"></div>
-<div class="row"><button class="btn" type="submit">Replay window</button></div>
+<label>Route<select name="route"><option value="">any</option>{{range .RouteNames}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
+<label>Target<select name="target"><option value="">any</option>{{range .TargetNames}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
+<label>Since<input type="datetime-local" name="since"></label>
+<label>Until<input type="datetime-local" name="until"></label>
+<button class="btn" type="submit">Replay window</button>
 </form></div>
 {{end}}

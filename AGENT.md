@@ -89,6 +89,15 @@ There is no Save button on an existing resource. Creation of a new route or targ
 - Delete must be its own form. If Delete is the only submit button on the edit form, Enter would fire it.
 - Toggling an optional Gmail scope submits the scopes form and starts the Google re-consent redirect. A one-line note on the page says it goes through Google. That is a navigation, not a toast.
 
+## List pages
+
+- Routes: the Match cell is one section per filter field in field order (From, To, Cc, Subject regex, Contains, Labels, Category, Attachment). Values sit one per line. A bar and "any of N" mark an ORed list; the AND/OR joiner between sections is the route operator. More than three values in a section collapse behind a twistie.
+- List values (From, To, Cc, Labels) and Subject or Contains edit in place through `POST /admin/routes/field` (`id`, `field`, newline-separated `value`), which answers the stored values as JSON. Category and attachment open the route page.
+- `match.SortSenders` orders From, To and Cc on every save: bare domains, then `*.` domains, then full addresses, A to Z, deduped without regard to case.
+- One drag handle per row. Only the handle starts a drag; the order saves on drag end. Alt+arrow still moves a focused row.
+- Targets show a destination label from the URL host (`targetDest`), never the raw URL. The URL is the title and the Copy URL button.
+- Every time on a page is in the user's display timezone. Templates use `when`, `short`, `full` and `clock`; `render` binds them per request to `page.Loc`.
+
 ## Toast API
 
 `toast(message, {kind, duration})` in `internal/web/static/app.js`.

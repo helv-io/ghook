@@ -216,3 +216,58 @@ func TestDecideClaimedSuppressesFallback(t *testing.T) {
 		t.Fatalf("claimed by a ghook/ label must not fall back: %+v", names(hits))
 	}
 }
+
+func TestSortSendersOrder(t *testing.T) {
+	in := []string{"zed@b.com", "*.cards.example.com", "beta.example.com", "Ada@example.com", "*.Bank.example.com", "alpha.example.com", "@bank.com", "BETA.EXAMPLE.COM", "bob@a.com", "ada@example.com"}
+	got := SortSenders(in)
+	want := []string{"alpha.example.com", "@bank.com", "beta.example.com", "*.Bank.example.com", "*.cards.example.com", "Ada@example.com", "bob@a.com", "zed@b.com"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("got %v\nwant %v", got, want)
+	}
+}
+
+func TestNormalizeSortsAddressLists(t *testing.T) {
+	s := Spec{From: []string{"x@b.com, a.com\n*.c.com"}, To: []string{"z@x.com", "y.com"}, Labels: []string{"Z", "A"}}.Normalize()
+	if strings.Join(s.From, ",") != "a.com,*.c.com,x@b.com" {
+		t.Fatalf("from %v", s.From)
+	}
+	if strings.Join(s.To, ",") != "y.com,z@x.com" {
+		t.Fatalf("to %v", s.To)
+	}
+	if strings.Join(s.Labels, ",") != "Z,A" {
+		t.Fatalf("labels keep their order: %v", s.Labels)
+	}
+}
+
+func TestViewSectionsKeepFieldOrder(t *testing.T) {
+	v := Spec{Op: "or", Subject: "(?i)bill", From: []string{"b.com", "a.com"}, Categories: []string{"primary"}, Attachment: "yes", Labels: []string{"INBOX"}}.View()
+	var keys []string
+	for _, s := range v.Sections {
+		keys = append(keys, s.Key)
+	}
+	if strings.Join(keys, ",") != "from,subject,labels,category,attachment" {
+		t.Fatalf("keys %v", keys)
+	}
+	if v.Op != "or" || v.Sections[0].Values[0] != "a.com" || v.Total() != 6 {
+		t.Fatalf("view %+v", v)
+	}
+	if v.Sections[3].Editable() || !v.Sections[0].Editable() {
+		t.Fatal("category is fixed, from is editable")
+	}
+	if (Spec{}).View().Sections != nil {
+		t.Fatal("empty spec has no sections")
+	}
+	if got := (Spec{From: []string{"a", "b", "c", "d", "e"}, To: []string{"x"}}).View().Hidden(3); got != 2 {
+		t.Fatalf("hidden %d", got)
+	}
+}
+
+func TestWithField(t *testing.T) {
+	s, ok := Spec{From: []string{"a.com"}}.WithField("from", "z@x.com\nb.com\n\n")
+	if !ok || strings.Join(s.From, ",") != "b.com,z@x.com" {
+		t.Fatalf("from %v", s.From)
+	}
+	if _, ok := s.WithField("category", "primary"); ok {
+		t.Fatal("category is not editable in place")
+	}
+}

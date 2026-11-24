@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -221,6 +222,86 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request, p page) {
 	s.routeForm(w, r, p, rt, msg, prev)
 }
 
+// routeField saves one filter field edited in place on the route list.
+// It answers JSON with the field's values as they were stored (sorted, deduped).
+func (s *Server) routeField(w http.ResponseWriter, r *http.Request, p page) {
+	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	field := r.FormValue("field")
+	rt, ok, err := s.db(r).RouteByID(id)
+	if err != nil || !ok {
+		s.fieldReply(w, r, http.StatusNotFound, "Route not found.", "", nil)
+		return
+	}
+	spec, ok := rt.Spec.WithField(field, r.FormValue("value"))
+	if !ok {
+		s.fieldReply(w, r, http.StatusBadRequest, "That field is edited on the route page.", field, nil)
+		return
+	}
+	if err := spec.Validate(); err != nil {
+		s.fieldReply(w, r, http.StatusBadRequest, "Subject regex: "+safeErr(err), field, nil)
+		return
+	}
+	rt.Spec = spec
+	saved, err := s.db(r).SaveRoute(rt)
+	if err != nil {
+		s.fieldReply(w, r, http.StatusBadRequest, safeErr(err), field, nil)
+		return
+	}
+	s.db(r).Audit(p.User, "route.save", saved.Name)
+	s.fieldReply(w, r, http.StatusOK, "", field, saved.Spec.Field(field))
+}
+
+func (s *Server) fieldReply(w http.ResponseWriter, r *http.Request, status int, msg, field string, values []string) {
+	if !wantsJSON(r) {
+		kind := "ok"
+		if status != http.StatusOK {
+			kind = "bad"
+		} else {
+			msg = "Route saved."
+		}
+		s.redirect(w, r, "/admin/routes", kind, msg)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(fieldResponse{OK: status == http.StatusOK, Error: msg, Field: field, Values: values})
+}
+
+type fieldResponse struct {
+	OK     bool     `json:"ok"`
+	Error  string   `json:"error,omitempty"`
+	Field  string   `json:"field,omitempty"`
+	Values []string `json:"values"`
+}
+
+// filterNames lists route and target names for the delivery filters, keeping a current
+// filter value even when nothing by that name exists any more.
+func (s *Server) filterNames(r *http.Request, route, target string) (routes, targets []string) {
+	rs, _ := s.db(r).Routes()
+	for _, x := range rs {
+		routes = append(routes, x.Name)
+	}
+	ts, _ := s.db(r).Targets()
+	for _, x := range ts {
+		targets = append(targets, x.Name)
+	}
+	keep := func(list []string, v string) []string {
+		if v == "" {
+			return list
+		}
+		for _, x := range list {
+			if x == v {
+				return list
+			}
+		}
+		return append(list, v)
+	}
+	routes, targets = keep(routes, route), keep(targets, target)
+	sort.Strings(routes)
+	sort.Strings(targets)
+	return routes, targets
+}
+
 func (s *Server) routeDelete(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
 	rt, _, _ := s.db(r).RouteByID(id)
@@ -308,6 +389,18 @@ func (s *Server) routeSimulate(w http.ResponseWriter, r *http.Request, p page) {
 func (s *Server) targets(w http.ResponseWriter, r *http.Request, p page) {
 	p.Title, p.Nav = "targets", "targets"
 	p.Targets, _ = s.db(r).Targets()
+	routes, _ := s.db(r).Routes()
+	last, _ := s.db(r).LastDeliveries()
+	for _, t := range p.Targets {
+		row := targetRow{Target: t, Dest: targetDest(t.URL)}
+		for _, rt := range routes {
+			if rt.TargetID == t.ID {
+				row.Routes = append(row.Routes, rt)
+			}
+		}
+		row.Last, row.HasLast = last[t.ID]
+		p.TargetRows = append(p.TargetRows, row)
+	}
 	s.render(w, "targets", p)
 }
 
@@ -417,6 +510,7 @@ func (s *Server) deliveries(w http.ResponseWriter, r *http.Request, p page) {
 	p.FilterTarget = r.URL.Query().Get("target")
 	p.Statuses = []string{"queued", "retry", "inflight", "sent", "dead"}
 	p.Deliveries, _ = s.db(r).Deliveries(p.FilterStatus, p.FilterRoute, p.FilterTarget, 200)
+	p.RouteNames, p.TargetNames = s.filterNames(r, p.FilterRoute, p.FilterTarget)
 	s.render(w, "deliveries", p)
 }
 

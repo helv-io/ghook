@@ -5,6 +5,7 @@ package match
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -57,9 +58,9 @@ func (s Spec) Normalize() Spec {
 	if s.Op != "or" {
 		s.Op = "and"
 	}
-	s.From = cleanList(s.From)
-	s.To = cleanList(s.To)
-	s.Cc = cleanList(s.Cc)
+	s.From = SortSenders(cleanList(s.From))
+	s.To = SortSenders(cleanList(s.To))
+	s.Cc = SortSenders(cleanList(s.Cc))
 	s.Labels = cleanList(s.Labels)
 	s.Categories = lowerList(s.Categories)
 	s.Subject = strings.TrimSpace(s.Subject)
@@ -86,6 +87,45 @@ func cleanList(in []string) []string {
 		}
 	}
 	return out
+}
+
+// SortSenders dedupes an address list case-insensitively and orders it:
+// bare domains first, then *.domains, then full addresses, each A to Z.
+// A leading @ counts as a bare domain.
+func SortSenders(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, v := range in {
+		k := strings.ToLower(v)
+		if v == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, v)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		ri, rj := senderRank(out[i]), senderRank(out[j])
+		if ri != rj {
+			return ri < rj
+		}
+		return senderKey(out[i]) < senderKey(out[j])
+	})
+	return out
+}
+
+func senderRank(v string) int {
+	v = strings.TrimPrefix(v, "@")
+	switch {
+	case strings.HasPrefix(v, "*."):
+		return 1
+	case strings.Contains(v, "@"):
+		return 2
+	}
+	return 0
+}
+
+func senderKey(v string) string {
+	return strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(v, "@"), "*."))
 }
 
 func lowerList(in []string) []string {

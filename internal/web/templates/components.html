@@ -1,3 +1,17 @@
 {{define "brandmark"}}<div class="brandmark"><img src="/favicon.svg" alt="" width="28" height="28"><span class="gh-word">ghook</span></div>{{end}}
 {{define "copybox"}}<button type="button" class="copybox" data-copy-text="{{.Text}}" aria-label="Copy {{.Label}}"><code>{{.Text}}</code><span class="copyhint">Tap to copy</span></button>{{end}}
 {{define "pill"}}<span class="pill {{.Class}}"{{if .Tip}} title="{{.Tip}}"{{end}}>{{.Text}}</span>{{end}}
+{{define "lock"}}<svg class="ico" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="7" width="11" height="7.5" fill="currentColor"/></svg>{{end}}
+{{define "matchcell"}}{{$v := view .Spec}}{{$id := .ID}}{{$hidden := $v.Hidden 3}}
+{{if not $v.Sections}}<span class="chip">matches everything</span>{{else}}
+<div class="matchbox{{if gt $hidden 0}} collapsed{{end}}" data-match="{{$id}}"{{if gt $hidden 0}} data-keep="3"{{end}}>
+{{range $i, $sec := $v.Sections}}{{if $i}}<div class="joiner" title="{{if eq $v.Op "or"}}Any field may match{{else}}Every field must match{{end}}"><span>{{if eq $v.Op "or"}}OR{{else}}AND{{end}}</span></div>{{end}}
+<section class="msec{{if gt (len $sec.Values) 1}} any{{end}}" data-field="{{$sec.Key}}" data-kind="{{$sec.Kind}}" aria-label="{{$sec.Label}}">
+<div class="msec-head"><span class="msec-label">{{$sec.Label}}</span>{{if gt (len $sec.Values) 1}}<span class="msec-op" title="Any one of these matches">any of {{len $sec.Values}}</span>{{end}}</div>
+<ul class="mvals">{{range $j, $val := $sec.Values}}<li{{if ge $j 3}} class="extra"{{end}}>{{if $sec.Editable}}<button type="button" class="mval{{if eq $sec.Kind "regex"}} re{{end}}" data-edit title="Edit">{{$val}}</button>{{else}}<a class="mval fixed" href="/admin/routes/{{$id}}" title="Edit on the route page">{{$val}}</a>{{end}}</li>{{end}}
+{{if eq $sec.Kind "list"}}<li class="addli"><button type="button" class="mval add" data-add aria-label="Add to {{$sec.Label}}">+ add</button></li>{{end}}</ul>
+</section>{{end}}
+{{if gt $hidden 0}}<button type="button" class="twistie" data-twistie aria-expanded="false" data-more="{{$hidden}}"><span class="tw-icon" aria-hidden="true"></span><span data-twistie-text>{{$hidden}} more</span></button>{{end}}
+</div>{{end}}{{end}}
+{{define "sender"}}{{$n := senderName .}}{{$a := senderAddr .}}{{if $n}}<div class="sender" title="{{.}}"><span class="sender-name">{{$n}}</span>{{if $a}}<span class="sender-addr">{{$a}}</span>{{end}}</div>{{else}}<span class="muted">—</span>{{end}}{{end}}
+{{define "when"}}{{if .}}<time class="nw" datetime="{{iso .}}" title="{{full .}} · {{rel .}}">{{short .}}</time>{{else}}<span class="muted">—</span>{{end}}{{end}}

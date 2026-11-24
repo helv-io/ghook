@@ -63,6 +63,7 @@ func (s *Server) pageFor(w http.ResponseWriter, r *http.Request, csrf string) (p
 	p := page{
 		CSRF: csrf, User: label, UserEmail: user.Email, Toasts: s.takeFlash(w, r),
 		Public: s.RT.Cfg.PublicURL,
+		Loc:    s.locOf(r),
 	}
 	return p, true
 }
