@@ -26,7 +26,7 @@ func TestUserIsolation(t *testing.T) {
 		t.Fatal("users share an id")
 	}
 
-	tgA, err := a.SaveTarget(Target{Name: "ceo", URL: "https://a.example.com/hook"}, "secret-a", false)
+	tgA, err := a.SaveTarget(Target{Name: "ops", URL: "https://a.example.com/hook"}, "secret-a", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,12 +39,12 @@ func TestUserIsolation(t *testing.T) {
 	}
 	if _, err := a.QueueAndAdvance(accA.ID, accA.Email, mail.Message{
 		ID: "m1", From: "bank@example.com", Subject: "Ada invoice", Date: time.Now().UTC(),
-	}, []MatchPlan{{RouteKey: "primary", RouteName: "primary", TargetID: tgA.ID, TargetName: "ceo"}}, ""); err != nil {
+	}, []MatchPlan{{RouteKey: "primary", RouteName: "primary", TargetID: tgA.ID, TargetName: "ops"}}, ""); err != nil {
 		t.Fatal(err)
 	}
 	a.Audit("Ada", "route.save", "primary")
 
-	tgB, err := b.SaveTarget(Target{Name: "ceo", URL: "https://b.example.com/hook"}, "secret-b", false)
+	tgB, err := b.SaveTarget(Target{Name: "ops", URL: "https://b.example.com/hook"}, "secret-b", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestUserIsolation(t *testing.T) {
 	if _, ok, _ := b.TargetByID(tgA.ID, true); ok {
 		t.Fatal("user B opened user A's target by id")
 	}
-	openB, ok, err := b.TargetByName("ceo", true)
+	openB, ok, err := b.TargetByName("ops", true)
 	if err != nil || !ok || openB.Secret() != "secret-b" {
 		t.Fatalf("secret %q ok %v err %v", openB.Secret(), ok, err)
 	}
@@ -123,7 +123,7 @@ func TestQuotaCounters(t *testing.T) {
 	if a.TargetCount() != 0 || a.RouteCount() != 0 {
 		t.Fatalf("fresh counts %d %d", a.TargetCount(), a.RouteCount())
 	}
-	tg, err := a.SaveTarget(Target{Name: "ceo", URL: "https://a.example.com/hook"}, "", false)
+	tg, err := a.SaveTarget(Target{Name: "ops", URL: "https://a.example.com/hook"}, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

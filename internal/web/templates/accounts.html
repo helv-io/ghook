@@ -37,7 +37,7 @@
 {{if .Accounts}}
 <section class="card">
 <h3>Labels</h3>
-<p>A label {{pathcode (printf "%s/CFO" .LabelPrefix)}} routes to the target named CFO when the label convention is on. {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}} is what <span class="gh-word">ghook</span> writes, and it does not route.</p>
+<p>With the label convention on, a label {{pathcode (printf "%s/<target>" .LabelPrefix)}} routes to the target of that name. {{pathcode (printf "%s/Routed/<target>" .LabelPrefix)}} is what <span class="gh-word">ghook</span> writes, and it does not route.</p>
 <form method="get" action="/admin/accounts" class="form">
 <div class="field"><label for="labels-account">Account</label>
 <select id="labels-account" name="labels">{{range .Accounts}}<option value="{{.ID}}" {{if eq .ID $.LabelAccount}}selected{{end}}>{{.Email}}</option>{{end}}</select></div>
@@ -49,7 +49,7 @@
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="hidden" name="account" value="{{.LabelAccount}}">
 <div class="field"><label for="new-label">New label name</label>
-<input id="new-label" name="name" placeholder="{{.LabelPrefix}}/CFO"></div>
+<input id="new-label" name="name" placeholder="{{.LabelPrefix}}/<target>"></div>
 <div class="row"><button class="act" type="submit">Create label</button></div>
 <p class="muted">Uses the account selected above. Needs <code>gmail.modify</code>.</p>
 </form>
@@ -57,11 +57,11 @@
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="hidden" name="account" value="{{.LabelAccount}}">
 <div class="field"><label for="filter-from">From</label>
-<input id="filter-from" name="from" placeholder="billing@example.com"></div>
+<input id="filter-from" name="from"></div>
 <div class="field"><label for="filter-subject">Subject</label>
 <input id="filter-subject" name="subject"></div>
 <div class="field"><label for="filter-label">Label to apply</label>
-<input id="filter-label" name="label" placeholder="{{.LabelPrefix}}/CFO"></div>
+<input id="filter-label" name="label" placeholder="{{.LabelPrefix}}/<target>"></div>
 <div class="row"><button class="act" type="submit">Create Gmail filter</button></div>
 <p class="muted">Uses the account selected above. Needs <code>gmail.settings.basic</code>. The label must already exist.</p>
 </form>

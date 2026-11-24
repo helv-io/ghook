@@ -94,7 +94,7 @@ func TestSessionCSRFAndPagesHideSecrets(t *testing.T) {
 	srv, db := testServer(t)
 	const secret = "super-secret-value"
 	ck, scoped, _ := loginAs(t, srv, db, "u-1", "ada@example.com", "Ada")
-	tg, err := scoped.SaveTarget(store.Target{Name: "ceo", URL: "https://bot.example.com/hook", AuthMode: "bearer"}, secret, false)
+	tg, err := scoped.SaveTarget(store.Target{Name: "ops", URL: "https://bot.example.com/hook", AuthMode: "bearer"}, secret, false)
 	if err != nil {
 		t.Fatal(err)
 	}

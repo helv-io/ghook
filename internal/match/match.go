@@ -398,9 +398,9 @@ func DecideClaimed(routes []Route, m mail.Message, claimed bool) []Route {
 	return hits
 }
 
-// LabelTargets returns target names implied by labels such as "ghook/CFO".
+// LabelTargets returns target names implied by labels of the form "ghook/<target>".
 // The segment after the prefix is the target name. Comparison is
-// case-insensitive, so an existing Gmail label "Ghook/CFO" still matches
+// case-insensitive, so an existing Gmail label "Ghook/<target>" still matches
 // the default prefix "ghook". Labels under "<prefix>/Routed/..." are the
 // labels ghook itself applies and are ignored.
 func LabelTargets(prefix string, labels []string) []string {

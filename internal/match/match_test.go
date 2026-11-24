@@ -10,10 +10,10 @@ import (
 
 func msg() mail.Message {
 	return mail.Message{
-		ID: "m1", From: "Ada Lovelace <ada@example.com>", To: "ceo@example.com, ops@example.com",
-		Cc: "cfo@example.com", Subject: "Invoice 1042", Snippet: "please pay the invoice",
+		ID: "m1", From: "Ada Lovelace <ada@example.com>", To: "ops@example.com, ops@example.com",
+		Cc: "cc@example.com", Subject: "Invoice 1042", Snippet: "please pay the invoice",
 		Plain: "wire details attached", Date: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-		Labels: []string{"INBOX", "Ghook/CFO", "Ghook/Routed/CEO"}, Category: "primary", HasAttachment: true,
+		Labels: []string{"INBOX", "Ghook/Chief of Staff", "Ghook/Routed/Ops"}, Category: "primary", HasAttachment: true,
 	}
 }
 
@@ -37,35 +37,35 @@ func TestFromAddressAndDomain(t *testing.T) {
 	if !(Spec{From: []string{"nope@nope.test", "ada@example.com"}}).Match(m) {
 		t.Fatal("list is OR")
 	}
-	sub := mail.Message{From: "Capital One <alerts@notification.capitalone.com>"}
-	if !(Spec{From: []string{"capitalone.com"}}).Match(sub) {
+	sub := mail.Message{From: "Example <alerts@notification.example.com>"}
+	if !(Spec{From: []string{"example.com"}}).Match(sub) {
 		t.Fatal("bare domain must match a subdomain")
 	}
-	if !(Spec{From: []string{"@capitalone.com"}}).Match(sub) {
+	if !(Spec{From: []string{"@example.com"}}).Match(sub) {
 		t.Fatal("@domain must match a subdomain")
 	}
-	if !(Spec{From: []string{"*.capitalone.com"}}).Match(sub) {
+	if !(Spec{From: []string{"*.example.com"}}).Match(sub) {
 		t.Fatal("*.domain must match a subdomain")
 	}
-	if !(Spec{From: []string{"*.capitalone.com"}}).Match(mail.Message{From: "a@alerts.email.capitalone.com"}) {
+	if !(Spec{From: []string{"*.example.com"}}).Match(mail.Message{From: "a@alerts.email.example.com"}) {
 		t.Fatal("*.domain must match a nested subdomain")
 	}
-	if !(Spec{From: []string{"*.CapitalOne.COM"}}).Match(mail.Message{From: "ALERTS@Notification.CapitalOne.com"}) {
+	if !(Spec{From: []string{"*.Example.COM"}}).Match(mail.Message{From: "ALERTS@Notification.Example.com"}) {
 		t.Fatal("*.domain is case-insensitive")
 	}
-	if (Spec{From: []string{"*.capitalone.com"}}).Match(mail.Message{From: "alerts@capitalone.com"}) {
+	if (Spec{From: []string{"*.example.com"}}).Match(mail.Message{From: "alerts@example.com"}) {
 		t.Fatal("*.domain must not match the apex")
 	}
-	if (Spec{From: []string{"*.capitalone.com"}}).Match(mail.Message{From: "eve@notcapitalone.com"}) {
+	if (Spec{From: []string{"*.example.com"}}).Match(mail.Message{From: "eve@notexample.com"}) {
 		t.Fatal("*.domain must not match a lookalike")
 	}
-	if (Spec{From: []string{"capitalone.com"}}).Match(mail.Message{From: "eve@notcapitalone.com"}) {
+	if (Spec{From: []string{"example.com"}}).Match(mail.Message{From: "eve@notexample.com"}) {
 		t.Fatal("suffix lookalike must not match")
 	}
-	if (Spec{From: []string{"capitalone.com"}}).Match(mail.Message{From: "eve@example.com"}) {
+	if (Spec{From: []string{"example.com"}}).Match(mail.Message{From: "eve@example.net"}) {
 		t.Fatal("unrelated domain must not match")
 	}
-	if !(Spec{From: []string{"capitalone.com"}}).Match(mail.Message{From: "alerts@capitalone.com"}) {
+	if !(Spec{From: []string{"example.com"}}).Match(mail.Message{From: "alerts@example.com"}) {
 		t.Fatal("bare domain must still match the apex")
 	}
 }
@@ -136,7 +136,7 @@ func TestDecideFirstWinsContinueFallback(t *testing.T) {
 		{Name: "invoices", Enabled: true, Continue: true, TargetName: "books", Spec: Spec{Subject: "Invoice"}},
 		{Name: "ada", Enabled: true, TargetName: "ada-bot", Spec: Spec{From: []string{"@example.com"}}},
 		{Name: "later", Enabled: true, TargetName: "nope", Spec: Spec{}},
-		{Name: "fallback", Enabled: true, Fallback: true, TargetName: "ceo", Spec: Spec{Categories: []string{"primary"}}},
+		{Name: "fallback", Enabled: true, Fallback: true, TargetName: "ops", Spec: Spec{Categories: []string{"primary"}}},
 	}
 	hits := Decide(routes, m)
 	if len(hits) != 2 || hits[0].Name != "invoices" || hits[1].Name != "ada" {
@@ -154,7 +154,7 @@ func TestDecideFirstWinsContinueFallback(t *testing.T) {
 	miss.Category = "promotions"
 	routes = []Route{
 		{Name: "ada", Enabled: true, TargetName: "ada-bot", Spec: Spec{From: []string{"ada@example.com"}}},
-		{Name: "fallback", Enabled: true, Fallback: true, TargetName: "ceo", Spec: Spec{Categories: []string{"primary"}}},
+		{Name: "fallback", Enabled: true, Fallback: true, TargetName: "ops", Spec: Spec{Categories: []string{"primary"}}},
 	}
 	if hits = Decide(routes, miss); len(hits) != 0 {
 		t.Fatalf("fallback filter should exclude promotions: %+v", names(hits))
@@ -172,9 +172,9 @@ func TestDecideFirstWinsContinueFallback(t *testing.T) {
 
 func TestLabelConvention(t *testing.T) {
 	// Existing Gmail labels may still use the old "Ghook/" capitalization.
-	got := LabelTargets("ghook", []string{"INBOX", "Ghook/CFO", "ghook/ceo", "Ghook/Routed/CFO", "Ghook/CFO/extra", "Other/X"})
+	got := LabelTargets("ghook", []string{"INBOX", "Ghook/Chief of Staff", "ghook/ops", "Ghook/Routed/Chief of Staff", "Ghook/Chief of Staff/extra", "Other/X"})
 	joined := strings.Join(got, ",")
-	if joined != "CFO,ceo" {
+	if joined != "Chief of Staff,ops" {
 		t.Fatalf("targets: %s", joined)
 	}
 	if LabelTargets("Ghook", []string{"ghook/Ops"})[0] != "Ops" {
@@ -183,10 +183,10 @@ func TestLabelConvention(t *testing.T) {
 	if LabelTargets("", []string{"Ghook/Ops"})[0] != "Ops" {
 		t.Fatal("default prefix still matches existing Ghook/ labels")
 	}
-	if RoutedLabel("", "CFO") != "ghook/Routed/CFO" {
-		t.Fatal(RoutedLabel("", "CFO"))
+	if RoutedLabel("", "Chief of Staff") != "ghook/Routed/Chief of Staff" {
+		t.Fatal(RoutedLabel("", "Chief of Staff"))
 	}
-	if RoutedLabel("Ghook", "CFO") != "Ghook/Routed/CFO" {
+	if RoutedLabel("Ghook", "Chief of Staff") != "Ghook/Routed/Chief of Staff" {
 		t.Fatal("an explicit stored prefix is kept as written")
 	}
 }
@@ -205,7 +205,7 @@ func TestDecideClaimedSuppressesFallback(t *testing.T) {
 	m.Subject = "tax bill"
 	routes := []Route{
 		{Name: "ada", Enabled: true, TargetName: "ada-bot", Spec: Spec{From: []string{"ada@example.com"}}},
-		{Name: "fallback", Enabled: true, Fallback: true, TargetName: "ceo", Spec: Spec{Categories: []string{"primary"}}},
+		{Name: "fallback", Enabled: true, Fallback: true, TargetName: "ops", Spec: Spec{Categories: []string{"primary"}}},
 	}
 	hits := Decide(routes, m)
 	if len(hits) != 1 || hits[0].Name != "fallback" {

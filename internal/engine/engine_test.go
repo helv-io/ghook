@@ -76,12 +76,12 @@ func TestSyncAdvancesHistoryAfterQueueAndDedupes(t *testing.T) {
 	if _, err := db.SaveAccount("ada@example.com", "refresh", "", 0, "gmail.readonly", "10"); err != nil {
 		t.Fatal(err)
 	}
-	cfo, err := db.SaveTarget(store.Target{Name: "CFO", URL: "https://cfo.example.com/hook"}, "s", false)
+	cos, err := db.SaveTarget(store.Target{Name: "Chief of Staff", URL: "https://a.example.com/hook"}, "s", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.SaveRoute(store.Route{
-		Name: "invoices", Enabled: true, TargetID: cfo.ID,
+		Name: "invoices", Enabled: true, TargetID: cos.ID,
 		Spec: match.Spec{Subject: "Invoice"},
 	}); err != nil {
 		t.Fatal(err)
@@ -137,22 +137,22 @@ func TestHistoryGoneFallsBackAndDedupesOverlap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfo, err := db.SaveTarget(store.Target{Name: "CFO", URL: "https://cfo.example.com/h"}, "s", false)
+	cos, err := db.SaveTarget(store.Target{Name: "Chief of Staff", URL: "https://a.example.com/h"}, "s", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ceo, err := db.SaveTarget(store.Target{Name: "CEO", URL: "https://ceo.example.com/h"}, "s", false)
+	ops, err := db.SaveTarget(store.Target{Name: "Ops", URL: "https://b.example.com/h"}, "s", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rt, err := db.SaveRoute(store.Route{Name: "all", Enabled: true, TargetID: cfo.ID})
+	rt, err := db.SaveRoute(store.Route{Name: "all", Enabled: true, TargetID: cos.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	old := mail.Message{ID: "old", From: "a@example.com", Subject: "old", Date: time.Now().UTC(), Labels: []string{"INBOX"}}
-	fresh := mail.Message{ID: "new", From: "a@example.com", Subject: "new", Date: time.Now().UTC(), Labels: []string{"INBOX", "Ghook/CEO"}}
+	fresh := mail.Message{ID: "new", From: "a@example.com", Subject: "new", Date: time.Now().UTC(), Labels: []string{"INBOX", "Ghook/Ops"}}
 	if _, err := db.QueueAndAdvance(acc.ID, acc.Email, old, []store.MatchPlan{{
-		RouteKey: "route:" + itoa(rt.ID), RouteName: "all", TargetID: cfo.ID, TargetName: "CFO",
+		RouteKey: "route:" + itoa(rt.ID), RouteName: "all", TargetID: cos.ID, TargetName: "Chief of Staff",
 	}}, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -170,10 +170,10 @@ func TestHistoryGoneFallsBackAndDedupesOverlap(t *testing.T) {
 	for _, d := range dels {
 		got[d.GmailID+":"+d.TargetName] = true
 	}
-	if !got["old:CFO"] || !got["new:CFO"] || !got["new:CEO"] || len(dels) != 3 {
+	if !got["old:Chief of Staff"] || !got["new:Chief of Staff"] || !got["new:Ops"] || len(dels) != 3 {
 		t.Fatalf("overlap: %+v", got)
 	}
-	_ = ceo
+	_ = ops
 }
 
 func TestLabelConventionClaimsMailAndSuppressesFallback(t *testing.T) {
@@ -181,23 +181,23 @@ func TestLabelConventionClaimsMailAndSuppressesFallback(t *testing.T) {
 	if _, err := db.SaveAccount("ada@example.com", "refresh", "", 0, "gmail.readonly", "10"); err != nil {
 		t.Fatal(err)
 	}
-	cfo, err := db.SaveTarget(store.Target{Name: "CFO", URL: "https://cfo.example.com/hook"}, "s", false)
+	cos, err := db.SaveTarget(store.Target{Name: "Chief of Staff", URL: "https://a.example.com/hook"}, "s", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ceo, err := db.SaveTarget(store.Target{Name: "CEO", URL: "https://ceo.example.com/hook"}, "s", false)
+	ops, err := db.SaveTarget(store.Target{Name: "Ops", URL: "https://b.example.com/hook"}, "s", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.SaveRoute(store.Route{
-		Name: "Important, unclaimed", Enabled: true, Fallback: true, TargetID: ceo.ID,
+		Name: "Important, unclaimed", Enabled: true, Fallback: true, TargetID: ops.ID,
 		Spec: match.Spec{Categories: []string{"primary"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	_ = db.SetSetting("label_convention", "true")
 	msg := mail.Message{ID: "m-tax", ThreadID: "t1", From: "bank@example.com", Subject: "tax bill",
-		Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Labels: []string{"INBOX", "Ghook/CFO", "CATEGORY_PERSONAL"},
+		Date: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Labels: []string{"INBOX", "Ghook/Chief of Staff", "CATEGORY_PERSONAL"},
 		Category: "primary"}
 	f := &fakeGmail{history: map[string][]mail.Message{"10": {msg}}, latest: map[string]string{"10": "15"}}
 	eng := &Engine{DB: db, Clients: func(context.Context, string) (gmailx.Client, error) { return f, nil }}
@@ -205,20 +205,20 @@ func TestLabelConventionClaimsMailAndSuppressesFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	dels, _ := db.Deliveries("", "", "", 10)
-	if len(dels) != 1 || dels[0].TargetName != "CFO" || dels[0].RouteName != "label:CFO" {
-		t.Fatalf("want only CFO via label, got %+v", dels)
+	if len(dels) != 1 || dels[0].TargetName != "Chief of Staff" || dels[0].RouteName != "label:Chief of Staff" {
+		t.Fatalf("want only Chief of Staff via label, got %+v", dels)
 	}
 	prev, err := eng.Preview(context.Background(), []match.Route{{
-		Name: "Important, unclaimed", Enabled: true, Fallback: true, TargetID: ceo.ID, TargetName: "CEO",
+		Name: "Important, unclaimed", Enabled: true, Fallback: true, TargetID: ops.ID, TargetName: "Ops",
 		Spec: match.Spec{Categories: []string{"primary"}},
 	}}, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(prev) != 1 || prev[0].Route != "label:CFO" {
+	if len(prev) != 1 || prev[0].Route != "label:Chief of Staff" {
 		t.Fatalf("simulator should honor the label convention, got %+v", prev)
 	}
-	_ = cfo
+	_ = cos
 }
 
 func TestCatchUpSyncUpdatesLastNotification(t *testing.T) {

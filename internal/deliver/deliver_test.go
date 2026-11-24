@@ -68,7 +68,7 @@ func queue(t *testing.T, db *store.DB, target store.Target, gmailID string) stor
 	if err != nil {
 		t.Fatal(err)
 	}
-	msg := mail.Message{ID: gmailID, ThreadID: "th", From: "ada@example.com", To: "ceo@example.com",
+	msg := mail.Message{ID: gmailID, ThreadID: "th", From: "ada@example.com", To: "ops@example.com",
 		Subject: "Hello", Snippet: "snippet", Date: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
 		Labels: []string{"INBOX"}, Category: "primary"}
 	if _, err := db.QueueAndAdvance(acc.ID, acc.Email, msg, []store.MatchPlan{{

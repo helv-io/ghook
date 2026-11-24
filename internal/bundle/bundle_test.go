@@ -17,7 +17,7 @@ func TestExportOmitsSecretsUnlessSealed(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	tg, err := db.SaveTarget(store.Target{Name: "ceo", URL: "https://bot.example.com/hook", AuthMode: "bearer"}, "hidden", false)
+	tg, err := db.SaveTarget(store.Target{Name: "ops", URL: "https://bot.example.com/hook", AuthMode: "bearer"}, "hidden", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestExportOmitsSecretsUnlessSealed(t *testing.T) {
 	if _, err := Import(db2, sealed, "correct horse"); err != nil {
 		t.Fatal(err)
 	}
-	got, ok, err := db2.TargetByName("ceo", true)
+	got, ok, err := db2.TargetByName("ops", true)
 	if err != nil || !ok || got.Secret() != "hidden" {
 		t.Fatalf("imported secret %q ok %v err %v", got.Secret(), ok, err)
 	}

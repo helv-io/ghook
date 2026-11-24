@@ -72,7 +72,7 @@ func TestSender(t *testing.T) {
 
 func seedRoute(t *testing.T, db *store.DB, from ...string) store.Route {
 	t.Helper()
-	tg, err := db.SaveTarget(store.Target{Name: "CFO", URL: "https://bot.example.com/hook/cfo", AuthMode: "bearer"}, "s3cret-value", false)
+	tg, err := db.SaveTarget(store.Target{Name: "Chief of Staff", URL: "https://bot.example.com/hook/a", AuthMode: "bearer"}, "s3cret-value", false)
 	if err != nil {
 		t.Fatal(err)
 	}

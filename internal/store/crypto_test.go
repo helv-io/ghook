@@ -34,7 +34,7 @@ func TestEnvelopeRoundTripRotateShred(t *testing.T) {
 	if _, err := scoped.SaveAccount("ada@example.com", token, "access-xyz", 0, "gmail.readonly", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := scoped.SaveTarget(Target{Name: "CFO", URL: "https://bot.example.com/hook"}, hookSecret, false); err != nil {
+	if _, err := scoped.SaveTarget(Target{Name: "Chief of Staff", URL: "https://bot.example.com/hook"}, hookSecret, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := scoped.SaveRoute(Route{Name: "invoices", TargetID: 1, Enabled: true, Spec: match.Spec{From: []string{fromAddr}}}); err != nil {
@@ -50,7 +50,7 @@ func TestEnvelopeRoundTripRotateShred(t *testing.T) {
 	if acc.RefreshToken() != token {
 		t.Fatalf("refresh token %q", acc.RefreshToken())
 	}
-	tg, ok, err := scoped.TargetByName("CFO", true)
+	tg, ok, err := scoped.TargetByName("Chief of Staff", true)
 	if err != nil || !ok || tg.Secret() != hookSecret {
 		t.Fatalf("target secret ok=%v err=%v", ok, err)
 	}
