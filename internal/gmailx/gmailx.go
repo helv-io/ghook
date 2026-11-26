@@ -22,6 +22,7 @@ type Label struct {
 
 // Filter is a Gmail filter that adds a label.
 type Filter struct {
+	ID       string
 	From     string
 	Subject  string
 	Query    string
@@ -40,4 +41,6 @@ type Client interface {
 	CreateLabel(ctx context.Context, name string) (Label, error)
 	AddLabels(ctx context.Context, messageID string, labelIDs []string) error
 	CreateFilter(ctx context.Context, f Filter) error
+	Filters(ctx context.Context) ([]Filter, error)
+	DeleteFilter(ctx context.Context, id string) error
 }

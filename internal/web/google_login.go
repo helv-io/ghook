@@ -236,24 +236,12 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request, _ page) {
 
 func (s *Server) accountPage(w http.ResponseWriter, r *http.Request, p page) {
 	p.Title, p.Nav = "account", "account"
+	s.fillKeys(w, r, &p)
 	s.render(w, "account", p)
 }
 
 func (s *Server) saveScopes(w http.ResponseWriter, r *http.Request, p page) {
-	_ = s.db(r).SetSetting("gmail_modify", on(r, "gmail_modify"))
-	_ = s.db(r).SetSetting("gmail_settings", on(r, "gmail_settings"))
-	s.db(r).Audit(p.User, "google.scopes", "updated Gmail scopes")
-	q := "/auth/google"
-	if r.FormValue("gmail_modify") == "1" {
-		q += "?modify=1"
-	}
-	if r.FormValue("gmail_settings") == "1" {
-		if strings.Contains(q, "?") {
-			q += "&settings=1"
-		} else {
-			q += "?settings=1"
-		}
-	}
+	q := s.opSetScopes(s.db(r), p.User, r.FormValue("gmail_modify") == "1", r.FormValue("gmail_settings") == "1")
 	http.Redirect(w, r, q, http.StatusSeeOther)
 }
 
@@ -262,19 +250,8 @@ func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request, p page) {
 		s.redirect(w, r, "/admin/account", "bad", "Tick the box to confirm deletion.")
 		return
 	}
-	db := s.db(r)
-	uid := db.UserID()
-	accs, _ := db.Accounts()
-	for _, a := range accs {
-		if c, err := s.RT.Client(r.Context(), a.Email); err == nil {
-			_ = c.Stop(r.Context())
-		}
-		if tok := a.RefreshToken(); tok != "" {
-			revokeGoogleToken(tok)
-		}
-	}
-	if err := s.RT.DB.Unscoped().DeleteUserData(uid); err != nil {
-		s.redirect(w, r, "/admin/account", "bad", "Could not delete the account.")
+	if err := s.opDeleteUser(r.Context(), s.db(r)); err != nil {
+		s.redirect(w, r, "/admin/account", "bad", msgOf(err))
 		return
 	}
 	nonce, _, _, ok := s.parseSession(r)

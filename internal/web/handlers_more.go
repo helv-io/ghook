@@ -13,71 +13,26 @@ import (
 
 	"github.com/helv-io/ghook/internal/bundle"
 	"github.com/helv-io/ghook/internal/engine"
-	"github.com/helv-io/ghook/internal/gmailx"
 	"github.com/helv-io/ghook/internal/match"
 	"github.com/helv-io/ghook/internal/store"
 	"google.golang.org/api/idtoken"
 )
 
-func (s *Server) mailbox(w http.ResponseWriter, r *http.Request) (store.Account, gmailx.Client, bool) {
-	id, _ := strconv.ParseInt(r.FormValue("account"), 10, 64)
-	acc, ok, _ := s.db(r).AccountByID(id)
-	if !ok {
-		s.redirect(w, r, "/admin/accounts", "bad", "Pick a mailbox.")
-		return store.Account{}, nil, false
-	}
-	c, err := s.RT.Client(r.Context(), acc.Email)
-	if err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", safeErr(err))
-		return store.Account{}, nil, false
-	}
-	return acc, c, true
-}
-
 func (s *Server) createLabel(w http.ResponseWriter, r *http.Request, p page) {
-	acc, c, ok := s.mailbox(w, r)
-	if !ok {
+	id, _ := strconv.ParseInt(r.FormValue("account"), 10, 64)
+	if _, err := s.opCreateLabel(r.Context(), s.db(r), p.User, id, r.FormValue("name")); err != nil {
+		s.redirect(w, r, "/admin/accounts", "bad", msgOf(err))
 		return
 	}
-	name := strings.TrimSpace(r.FormValue("name"))
-	if name == "" {
-		s.redirect(w, r, "/admin/accounts", "bad", "Enter a label name.")
-		return
-	}
-	if _, err := c.CreateLabel(r.Context(), name); err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", "Could not create the label. gmail.modify has to be granted.")
-		return
-	}
-	s.db(r).Audit(p.User, "label.create", acc.Email+" "+name)
-	s.redirect(w, r, "/admin/accounts?labels="+strconv.FormatInt(acc.ID, 10), "ok", "Label created.")
+	s.redirect(w, r, "/admin/accounts?labels="+strconv.FormatInt(id, 10), "ok", "Label created.")
 }
 
 func (s *Server) createFilter(w http.ResponseWriter, r *http.Request, p page) {
-	acc, c, ok := s.mailbox(w, r)
-	if !ok {
+	id, _ := strconv.ParseInt(r.FormValue("account"), 10, 64)
+	if err := s.opCreateFilter(r.Context(), s.db(r), p.User, id, r.FormValue("from"), r.FormValue("subject"), r.FormValue("label")); err != nil {
+		s.redirect(w, r, "/admin/accounts", "bad", msgOf(err))
 		return
 	}
-	labelName := strings.TrimSpace(r.FormValue("label"))
-	labels, err := c.Labels(r.Context())
-	if err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", "Could not list labels.")
-		return
-	}
-	var id string
-	for _, l := range labels {
-		if strings.EqualFold(l.Name, labelName) {
-			id = l.ID
-		}
-	}
-	if id == "" {
-		s.redirect(w, r, "/admin/accounts", "bad", "That label does not exist yet.")
-		return
-	}
-	if err := c.CreateFilter(r.Context(), gmailx.Filter{From: r.FormValue("from"), Subject: r.FormValue("subject"), AddLabel: id}); err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", "Could not create the filter. gmail.settings.basic has to be granted.")
-		return
-	}
-	s.db(r).Audit(p.User, "filter.create", acc.Email+" "+labelName)
 	s.redirect(w, r, "/admin/accounts", "ok", "Filter created.")
 }
 
@@ -110,10 +65,11 @@ func (s *Server) routeEdit(w http.ResponseWriter, r *http.Request, p page) {
 	s.render(w, "route_edit", p)
 }
 
-func routeFrom(r *http.Request) (store.Route, error) {
+// routeFrom reads the route form. Validation is checkRoute's job.
+func routeFrom(r *http.Request) store.Route {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
 	tid, _ := strconv.ParseInt(r.FormValue("target_id"), 10, 64)
-	rt := store.Route{
+	return store.Route{
 		ID: id, Name: strings.TrimSpace(r.FormValue("name")), TargetID: tid,
 		Enabled: r.FormValue("enabled") == "1", Fallback: r.FormValue("fallback") == "1",
 		Continue: r.FormValue("continue") == "1", ApplyLabel: r.FormValue("apply_label") == "1",
@@ -123,47 +79,21 @@ func routeFrom(r *http.Request) (store.Route, error) {
 			Labels: []string{r.FormValue("labels")}, Categories: r.Form["category"], Attachment: r.FormValue("attachment"),
 		}.Normalize(),
 	}
-	if rt.Name == "" {
-		return rt, fmt.Errorf("a route needs a name")
-	}
-	if rt.TargetID == 0 {
-		return rt, fmt.Errorf("pick a target")
-	}
-	if err := rt.Spec.Validate(); err != nil {
-		return rt, fmt.Errorf("subject regex: %s", safeErr(err))
-	}
-	return rt, nil
 }
 
 func (s *Server) routeSave(w http.ResponseWriter, r *http.Request, p page) {
-	rt, err := routeFrom(r)
+	rt := routeFrom(r)
+	saved, err := s.opSaveRoute(s.db(r), p.User, rt)
 	if err != nil {
+		_, msg, field := explain(err)
 		if wantsJSON(r) {
-			writeSaveErr(w, err.Error(), fieldFor(err.Error()))
-			return
-		}
-		s.routeForm(w, r, p, rt, err.Error(), nil)
-		return
-	}
-	if rt.ID == 0 && s.db(r).RouteCount() >= s.RT.Cfg.MaxRoutes {
-		msg := store.ErrQuota{Kind: "routes", Max: s.RT.Cfg.MaxRoutes}.Error()
-		if wantsJSON(r) {
-			writeSaveErr(w, msg, "")
+			writeSaveErr(w, msg, field)
 			return
 		}
 		s.routeForm(w, r, p, rt, msg, nil)
 		return
 	}
-	saved, err := s.db(r).SaveRoute(rt)
-	if err != nil {
-		if wantsJSON(r) {
-			writeSaveErr(w, safeErr(err), fieldFor(safeErr(err)))
-			return
-		}
-		s.routeForm(w, r, p, rt, safeErr(err), nil)
-		return
-	}
-	s.db(r).Audit(p.User, "route.save", saved.Name)
+	_ = saved
 	if wantsJSON(r) {
 		writeSaveOK(w)
 		return
@@ -189,35 +119,12 @@ func (s *Server) routeForm(w http.ResponseWriter, r *http.Request, p page, rt st
 }
 
 func (s *Server) routePreview(w http.ResponseWriter, r *http.Request, p page) {
-	rt, err := routeFrom(r)
+	rt, err := checkRoute(s.db(r), routeFrom(r))
 	if err != nil {
-		s.routeForm(w, r, p, rt, err.Error(), nil)
+		s.routeForm(w, r, p, rt, msgOf(err), nil)
 		return
 	}
-	if tg, ok, _ := s.db(r).TargetByID(rt.TargetID, false); ok {
-		rt.TargetName = tg.Name
-	}
-	saved, _ := s.db(r).Routes()
-	var rules []match.Route
-	replaced := false
-	for _, existing := range saved {
-		if rt.ID != 0 && existing.ID == rt.ID {
-			rules = append(rules, rt.AsMatch())
-			replaced = true
-			continue
-		}
-		rules = append(rules, existing.AsMatch())
-	}
-	if !replaced {
-		rules = append(rules, rt.AsMatch())
-	}
-	n := atoi(r.FormValue("n"))
-	if n <= 0 {
-		n = 20
-	}
-	eng := *s.RT.Engine
-	eng.DB = s.db(r)
-	prev, err := eng.Preview(r.Context(), rules, n)
+	prev, err := s.opPreview(r.Context(), s.db(r), rt, atoi(r.FormValue("n")))
 	msg := ""
 	if err != nil {
 		msg = safeErr(err)
@@ -227,31 +134,24 @@ func (s *Server) routePreview(w http.ResponseWriter, r *http.Request, p page) {
 
 // routeField saves one filter field edited in place on the route list.
 // It answers JSON with the field's values as they were stored (sorted, deduped).
+// routeField saves one filter field edited in place on the route list.
+// It answers JSON with the field's values as they were stored (sorted, deduped).
 func (s *Server) routeField(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
 	field := r.FormValue("field")
-	rt, ok, err := s.db(r).RouteByID(id)
-	if err != nil || !ok {
-		s.fieldReply(w, r, http.StatusNotFound, "Route not found.", "", nil)
-		return
-	}
-	spec, ok := rt.Spec.WithField(field, r.FormValue("value"))
-	if !ok {
-		s.fieldReply(w, r, http.StatusBadRequest, "That field is edited on the route page.", field, nil)
-		return
-	}
-	if err := spec.Validate(); err != nil {
-		s.fieldReply(w, r, http.StatusBadRequest, "Subject regex: "+safeErr(err), field, nil)
-		return
-	}
-	rt.Spec = spec
-	saved, err := s.db(r).SaveRoute(rt)
+	values, err := s.opRouteField(s.db(r), p.User, id, field, r.FormValue("value"))
 	if err != nil {
-		s.fieldReply(w, r, http.StatusBadRequest, safeErr(err), field, nil)
+		status, msg, f := explain(err)
+		if f == "" {
+			f = field
+		}
+		if status == http.StatusNotFound {
+			f = ""
+		}
+		s.fieldReply(w, r, status, msg, f, nil)
 		return
 	}
-	s.db(r).Audit(p.User, "route.save", saved.Name)
-	s.fieldReply(w, r, http.StatusOK, "", field, saved.Spec.Field(field))
+	s.fieldReply(w, r, http.StatusOK, "", field, values)
 }
 
 func (s *Server) fieldReply(w http.ResponseWriter, r *http.Request, status int, msg, field string, values []string) {
@@ -307,81 +207,50 @@ func (s *Server) filterNames(r *http.Request, route, target string) (routes, tar
 
 func (s *Server) routeDelete(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	rt, _, _ := s.db(r).RouteByID(id)
-	if err := s.db(r).DeleteRoute(id); err != nil {
+	if err := s.opDeleteRoute(s.db(r), p.User, id); err != nil {
 		s.redirect(w, r, "/admin/routes", "bad", "Could not delete the route.")
 		return
 	}
-	s.db(r).Audit(p.User, "route.delete", rt.Name)
 	s.redirect(w, r, "/admin/routes", "ok", "Route deleted.")
 }
 
 func (s *Server) routeReorder(w http.ResponseWriter, r *http.Request, p page) {
+	if err := s.opReorderRoutes(s.db(r), p.User, formIDs(r.Form["id"])); err != nil {
+		status, msg, _ := explain(err)
+		http.Error(w, msg, status)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func formIDs(raw []string) []int64 {
 	var ids []int64
-	for _, raw := range r.Form["id"] {
-		id, err := strconv.ParseInt(raw, 10, 64)
-		if err == nil {
+	for _, v := range raw {
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
 			ids = append(ids, id)
 		}
 	}
-	if len(ids) == 0 {
-		http.Error(w, "nothing to reorder", http.StatusBadRequest)
-		return
-	}
-	if err := s.db(r).ReorderRoutes(ids); err != nil {
-		http.Error(w, "could not save the order", http.StatusInternalServerError)
-		return
-	}
-	s.db(r).Audit(p.User, "route.reorder", fmt.Sprintf("%d routes", len(ids)))
-	w.WriteHeader(http.StatusNoContent)
+	return ids
 }
 
 func (s *Server) routeMove(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	routes, _ := s.db(r).Routes()
-	idx := -1
-	for i, rt := range routes {
-		if rt.ID == id {
-			idx = i
-		}
-	}
-	if idx < 0 {
-		s.redirect(w, r, "/admin/routes", "bad", "Route not found.")
+	if err := s.opMoveRoute(s.db(r), p.User, id, r.FormValue("dir")); err != nil {
+		s.redirect(w, r, "/admin/routes", "bad", msgOf(err))
 		return
 	}
-	swap := idx - 1
-	if r.FormValue("dir") == "down" {
-		swap = idx + 1
-	}
-	if swap < 0 || swap >= len(routes) {
-		http.Redirect(w, r, "/admin/routes", http.StatusSeeOther)
-		return
-	}
-	routes[idx], routes[swap] = routes[swap], routes[idx]
-	var ids []int64
-	for _, rt := range routes {
-		ids = append(ids, rt.ID)
-	}
-	_ = s.db(r).ReorderRoutes(ids)
-	s.db(r).Audit(p.User, "route.reorder", "moved one route")
 	http.Redirect(w, r, "/admin/routes", http.StatusSeeOther)
 }
 
 func (s *Server) routeSimulate(w http.ResponseWriter, r *http.Request, p page) {
 	p.Title, p.Nav = "routes", "routes"
 	p.Routes, _ = s.db(r).Routes()
-	var rules []match.Route
-	for _, rt := range p.Routes {
-		rules = append(rules, rt.AsMatch())
-	}
 	n := atoi(r.FormValue("n"))
 	if n <= 0 {
 		n = 20
 	}
 	p.PreviewN = n
-	eng := *s.RT.Engine
-	eng.DB = s.db(r)
-	prev, err := eng.Preview(r.Context(), rules, n)
+	prev, err := s.opSimulate(r.Context(), s.db(r), n)
 	if err != nil {
 		p.Err = safeErr(err)
 	}
@@ -458,29 +327,12 @@ func (s *Server) targetSave(w http.ResponseWriter, r *http.Request, p page) {
 		p.Title, p.Nav = "target", "targets"
 		s.render(w, "target_edit", p)
 	}
-	if strings.TrimSpace(t.Name) == "" || strings.TrimSpace(t.URL) == "" {
-		field := "name"
-		if t.Name != "" {
-			field = "url"
-		}
-		fail("A target needs a name and a webhook URL.", field)
-		return
-	}
-	if !strings.HasPrefix(t.URL, "https://") && !strings.HasPrefix(t.URL, "http://") {
-		fail("The URL must be http or https.", "url")
-		return
-	}
-	if t.ID == 0 && s.db(r).TargetCount() >= s.RT.Cfg.MaxTargets {
-		fail(store.ErrQuota{Kind: "targets", Max: s.RT.Cfg.MaxTargets}.Error(), "")
-		return
-	}
 	t.PayloadPubKey = strings.TrimSpace(r.FormValue("payload_pubkey"))
-	saved, err := s.db(r).SaveTarget(t, secret, r.FormValue("clear_secret") == "1")
-	if err != nil {
-		fail(safeErr(err), fieldFor(safeErr(err)))
+	if _, err := s.opSaveTarget(s.db(r), p.User, t, secret, r.FormValue("clear_secret") == "1"); err != nil {
+		_, msg, field := explain(err)
+		fail(msg, field)
 		return
 	}
-	s.db(r).Audit(p.User, "target.save", saved.Name)
 	if wantsJSON(r) {
 		writeSaveOK(w)
 		return
@@ -494,34 +346,29 @@ func (s *Server) targetSave(w http.ResponseWriter, r *http.Request, p page) {
 
 func (s *Server) targetDelete(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	t, _, _ := s.db(r).TargetByID(id, false)
-	if err := s.db(r).DeleteTarget(id); err != nil {
-		s.redirect(w, r, "/admin/targets/"+strconv.FormatInt(id, 10), "bad", safeErr(err))
+	if err := s.opDeleteTarget(s.db(r), p.User, id); err != nil {
+		s.redirect(w, r, "/admin/targets/"+strconv.FormatInt(id, 10), "bad", msgOf(err))
 		return
 	}
-	s.db(r).Audit(p.User, "target.delete", t.Name)
 	s.redirect(w, r, "/admin/targets", "ok", "Target deleted.")
 }
 
 func (s *Server) targetPause(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	paused := r.FormValue("paused") == "1"
-	if err := s.db(r).SetTargetPaused(id, paused); err != nil {
+	if err := s.opPauseTarget(s.db(r), p.User, id, r.FormValue("paused") == "1"); err != nil {
 		s.redirect(w, r, "/admin/targets", "bad", "Could not update the target.")
 		return
 	}
-	s.db(r).Audit(p.User, "target.pause", fmt.Sprintf("id %d paused=%v", id, paused))
 	s.redirect(w, r, "/admin/targets", "ok", "Target updated.")
 }
 
 func (s *Server) targetTest(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	d, err := s.RT.Worker.SendTest(r.Context(), s.db(r), id)
+	d, err := s.opTestTarget(r.Context(), s.db(r), p.User, id)
 	if err != nil {
-		s.redirect(w, r, "/admin/targets", "bad", safeErr(err))
+		s.redirect(w, r, "/admin/targets", "bad", msgOf(err))
 		return
 	}
-	s.db(r).Audit(p.User, "target.test", d.TargetName)
 	http.Redirect(w, r, "/admin/deliveries/"+strconv.FormatInt(d.ID, 10), http.StatusSeeOther)
 }
 
@@ -550,31 +397,29 @@ func (s *Server) delivery(w http.ResponseWriter, r *http.Request, p page) {
 
 func (s *Server) deliveryRetry(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	if err := s.db(r).Replay(id, false); err != nil {
+	if err := s.opRequeue(s.db(r), p.User, id, false); err != nil {
 		s.redirect(w, r, "/admin/deliveries", "bad", "Could not retry.")
 		return
 	}
-	s.db(r).Audit(p.User, "delivery.retry", strconv.FormatInt(id, 10))
 	s.redirect(w, r, "/admin/deliveries/"+strconv.FormatInt(id, 10), "ok", "Queued again with the same delivery id.")
 }
 
 func (s *Server) deliveryReplay(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	if err := s.db(r).Replay(id, true); err != nil {
+	if err := s.opRequeue(s.db(r), p.User, id, true); err != nil {
 		s.redirect(w, r, "/admin/deliveries", "bad", "Could not replay.")
 		return
 	}
-	s.db(r).Audit(p.User, "delivery.replay", strconv.FormatInt(id, 10))
 	s.redirect(w, r, "/admin/deliveries/"+strconv.FormatInt(id, 10), "ok", "Queued again with a new delivery id.")
 }
 
 func (s *Server) deliveryWindow(w http.ResponseWriter, r *http.Request, p page) {
-	n, err := s.db(r).ReplayWindow(strings.TrimSpace(r.FormValue("route")), strings.TrimSpace(r.FormValue("target")), parseTime(r.FormValue("since"), s.locOf(r)), parseTime(r.FormValue("until"), s.locOf(r)))
+	loc := s.locOf(r)
+	n, err := s.opReplayWindow(s.db(r), p.User, r.FormValue("route"), r.FormValue("target"), parseTime(r.FormValue("since"), loc), parseTime(r.FormValue("until"), loc))
 	if err != nil {
 		s.redirect(w, r, "/admin/deliveries", "bad", "Could not replay that window.")
 		return
 	}
-	s.db(r).Audit(p.User, "delivery.replay.window", fmt.Sprintf("%d", n))
 	s.redirect(w, r, "/admin/deliveries", "ok", fmt.Sprintf("Re-queued %d deliveries.", n))
 }
 
@@ -612,49 +457,23 @@ func (s *Server) fillSettings(r *http.Request, p *page) {
 }
 
 func (s *Server) settingsSave(w http.ResponseWriter, r *http.Request, p page) {
-	db := s.db(r)
-	prefix := strings.TrimSpace(r.FormValue("label_prefix"))
-	if strings.EqualFold(prefix, match.DefaultPrefix) {
-		prefix = match.DefaultPrefix
+	kv := map[string]string{}
+	for _, k := range settingKeys {
+		if k.Bool {
+			kv[k.Key] = on(r, k.Key)
+		} else {
+			kv[k.Key] = r.FormValue(k.Key)
+		}
 	}
-	pairs := [][2]string{
-		{"label_prefix", prefix},
-		{"label_convention", on(r, "label_convention")},
-		{"catchup_minutes", r.FormValue("catchup_minutes")},
-		{"resync_days", r.FormValue("resync_days")},
-		{"retry_max_attempts", r.FormValue("retry_max_attempts")},
-		{"retry_max_hours", r.FormValue("retry_max_hours")},
-		{"retry_base_seconds", r.FormValue("retry_base_seconds")},
-		{"retention_days", r.FormValue("retention_days")},
-		{"retain_bodies", on(r, "retain_bodies")},
-		{"timezone", strings.TrimSpace(r.FormValue("timezone"))},
-		{"notify_target", r.FormValue("notify_target")},
-		{"notify_dead", on(r, "notify_dead")},
-		{"notify_watch", on(r, "notify_watch")},
-		{"testing_mode", on(r, "testing_mode")},
-	}
-	if pairs[9][1] == "" {
-		pairs[9][1] = "UTC"
-	}
-	if _, err := time.LoadLocation(pairs[9][1]); err != nil {
+	if err := s.opSaveSettings(s.db(r), p.User, kv); err != nil {
+		_, msg, field := explain(err)
 		if wantsJSON(r) {
-			writeSaveErr(w, "Unknown timezone.", "timezone")
+			writeSaveErr(w, msg, field)
 			return
 		}
-		s.redirect(w, r, "/admin/settings", "bad", "Unknown timezone.")
+		s.redirect(w, r, "/admin/settings", "bad", msg)
 		return
 	}
-	for _, kv := range pairs {
-		if err := db.SetSetting(kv[0], kv[1]); err != nil {
-			if wantsJSON(r) {
-				writeSaveErr(w, "Could not save settings.", kv[0])
-				return
-			}
-			s.redirect(w, r, "/admin/settings", "bad", "Could not save settings.")
-			return
-		}
-	}
-	s.db(r).Audit(p.User, "settings.save", "updated settings")
 	if wantsJSON(r) {
 		writeSaveOK(w)
 		return

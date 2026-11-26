@@ -54,7 +54,7 @@ func (d *DB) hasColumn(table, col string) bool {
 }
 
 func (d *DB) create() error {
-	_, err := d.SQL.Exec(schema)
+	_, err := d.SQL.Exec(schema + apiKeysSchema)
 	return err
 }
 

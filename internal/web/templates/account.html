@@ -7,6 +7,31 @@
 </div>
 <form method="post" action="/admin/logout" class="row"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn" type="submit">Sign out</button></form>
 
+<details class="more" id="api-keys"{{if .NewKey}} open{{end}}>
+<summary><span class="tw-icon" aria-hidden="true"></span>API keys</summary>
+<div class="more-body">
+{{if .NewKey}}<div class="callout ok"><p>Copy the key for {{.NewKeyName}} now. It is not shown again.</p>
+<button type="button" class="copybox" data-copy-text="{{.NewKey}}" aria-label="Copy the new API key"><code>{{.NewKey}}</code><span class="copyhint">Tap to copy</span></button></div>{{end}}
+<p class="muted">A key lets a script act as you. Send it as <code>Authorization: Bearer</code>.</p>
+{{if .APIKeys}}
+<div class="card flush tablewrap"><table class="table">
+<thead><tr><th>Name</th><th>Key</th><th>Access</th><th>Last used</th><th class="actions-th"></th></tr></thead>
+<tbody>{{range .APIKeys}}<tr>
+<td data-label="Name">{{.Name}}</td>
+<td data-label="Key"><code>{{.Display}}</code></td>
+<td data-label="Access">{{keyScope .}}</td>
+<td data-label="Last used">{{rel .LastUsed}}</td>
+<td class="actions-cell" data-label=""><form method="post" action="/admin/account/keys/revoke" data-confirm="Revoke {{.Name}}? Scripts using it stop working." data-confirm-danger="1"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="act danger small">Revoke</button></form></td>
+</tr>{{end}}</tbody></table></div>
+{{end}}
+<form method="post" action="/admin/account/keys" class="form">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="field"><label for="key-name">Name</label><input id="key-name" name="name" maxlength="64" required autocomplete="off"></div>
+<div class="field"><label for="key-scope">Access</label><select id="key-scope" name="scope"><option value="read">Read only</option><option value="write">Read and write</option></select></div>
+<div class="row"><button class="act" type="submit">Create key</button></div>
+</form>
+</div></details>
+
 <h2>Delete my account and data</h2>
 <div class="card">
 <p>This stops the Gmail watch, revokes the Google token, and deletes your routes, targets, deliveries, settings and mailbox state. It cannot be undone.</p>

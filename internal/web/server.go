@@ -48,6 +48,10 @@ type Server struct {
 	sessions  sessionStore
 	secretMu  sync.Mutex
 	secretKey []byte
+
+	apiRate  limiter
+	apiFails limiter
+	reveal   revealStore
 }
 
 type sessionStore struct {
@@ -134,6 +138,10 @@ type page struct {
 
 	Audits []store.AuditRow
 
+	// APIKeys are the user's active keys. NewKey is a key created a moment ago, shown once.
+	APIKeys            []store.APIKey
+	NewKey, NewKeyName string
+
 	// Loc is the signed-in user's display timezone. Every time on a page is shown in it.
 	Loc                     *time.Location
 	TargetRows              []targetRow
@@ -204,6 +212,7 @@ func (s *Server) funcs() template.FuncMap {
 		"rel":         func(u int64) string { return s.rel(u) },
 		"lines":       func(v []string) string { return strings.Join(v, "\n") },
 		"summary":     func(sp match.Spec) string { return sp.Summary() },
+		"keyScope":    keyScope,
 		"has": func(list []string, x string) bool {
 			for _, v := range list {
 				if strings.EqualFold(v, x) {
@@ -365,6 +374,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /admin/audit", s.guard(s.auditPage))
 	mux.HandleFunc("GET /admin/account", s.guard(s.accountPage))
 	mux.HandleFunc("POST /admin/account/delete", s.guard(s.deleteAccount))
+	mux.HandleFunc("POST /admin/account/keys", s.guard(s.keyCreate))
+	mux.HandleFunc("POST /admin/account/keys/revoke", s.guard(s.keyRevoke))
+	s.mountAPI(mux)
 	return secureHeaders(mux)
 }
 

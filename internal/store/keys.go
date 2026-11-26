@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS user_keys (
 `
 
 func (d *DB) ensure() error {
-	if _, err := d.SQL.Exec(userKeysSchema); err != nil {
+	if _, err := d.SQL.Exec(userKeysSchema + apiKeysSchema); err != nil {
 		return err
 	}
 	if !d.hasColumn("targets", "payload_pubkey") {

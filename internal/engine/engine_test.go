@@ -45,6 +45,8 @@ func (f *fakeGmail) CreateLabel(_ context.Context, name string) (gmailx.Label, e
 }
 func (f *fakeGmail) AddLabels(context.Context, string, []string) error { return nil }
 func (f *fakeGmail) CreateFilter(context.Context, gmailx.Filter) error { return nil }
+func (f *fakeGmail) Filters(context.Context) ([]gmailx.Filter, error)  { return nil, nil }
+func (f *fakeGmail) DeleteFilter(context.Context, string) error        { return nil }
 
 func openDB(t *testing.T) *store.DB {
 	t.Helper()

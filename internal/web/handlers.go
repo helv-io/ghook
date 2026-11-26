@@ -13,7 +13,6 @@ import (
 
 	"github.com/helv-io/ghook/internal/feed"
 	"github.com/helv-io/ghook/internal/match"
-	"github.com/helv-io/ghook/internal/pubsubx"
 	"github.com/helv-io/ghook/internal/store"
 )
 
@@ -125,13 +124,17 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, _ page) {
 	w.Header().Set("Cache-Control", "no-cache")
 	ch, cancel := s.RT.Feed.Subscribe()
 	defer cancel()
-	loc := s.loc()
+	uid := s.db(r).UserID()
+	loc := s.locOf(r)
 	send := func(ev feed.Event) {
+		if ev.UserID != uid {
+			return
+		}
 		raw, _ := json.Marshal(map[string]string{"time": ev.Time.In(loc).Format("15:04:05"), "text": ev.Text, "kind": ev.Kind})
 		fmt.Fprintf(w, "data: %s\n\n", raw)
 		fl.Flush()
 	}
-	for _, ev := range s.RT.Feed.Backlog() {
+	for _, ev := range s.RT.Feed.BacklogFor(uid) {
 		send(ev)
 	}
 	for {
@@ -162,18 +165,12 @@ func (s *Server) fillAccounts(p *page, r *http.Request) {
 	if id := r.URL.Query().Get("labels"); id != "" {
 		n, _ := strconv.ParseInt(id, 10, 64)
 		p.LabelAccount = n
-		if acc, ok, _ := s.db(r).AccountByID(n); ok {
-			if c, err := s.RT.Client(r.Context(), acc.Email); err == nil {
-				if ls, err := c.Labels(r.Context()); err == nil {
-					for _, l := range ls {
-						p.Labels = append(p.Labels, labelView{ID: l.ID, Name: l.Name})
-					}
-				} else {
-					p.Err = safeErr(err)
-				}
-			} else if p.Err == "" {
-				p.Err = safeErr(err)
+		if _, ok, _ := s.db(r).AccountByID(n); ok {
+			ls, err := s.opLabels(r.Context(), s.db(r), n)
+			if err != nil {
+				p.Err = msgOf(err)
 			}
+			p.Labels = ls
 		}
 	}
 }
@@ -224,60 +221,29 @@ func subtleCompare(a, b string) int {
 
 func (s *Server) renewOne(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	acc, ok, _ := s.db(r).AccountByID(id)
-	if !ok {
-		s.redirect(w, r, "/admin/accounts", "bad", "Mailbox not found.")
-		return
-	}
-	if s.RT == nil || !s.RT.Cfg.PubSubReady() {
-		s.redirect(w, r, "/admin/accounts", "bad", "Pub/Sub is not configured on this instance.")
-		return
-	}
-	c, err := s.RT.Client(r.Context(), acc.Email)
+	acc, err := s.opRenewWatch(r.Context(), s.db(r), p.User, id)
 	if err != nil {
-		s.redirect(w, r, "/admin/accounts", "bad", safeErr(err))
+		s.redirect(w, r, "/admin/accounts", "bad", msgOf(err))
 		return
 	}
-	hist, exp, err := c.Watch(r.Context(), pubsubx.TopicPath(s.RT.Cfg.PubSubProject, s.RT.Cfg.PubSubTopic))
-	if err != nil {
-		_ = s.db(r).SetWatch(acc.ID, acc.WatchExpiry, "", safeErr(err))
-		s.RT.Feed.AddFor(acc.UserID, "error", "Watch renewal failed")
-		s.redirect(w, r, "/admin/accounts", "bad", "Watch renewal failed.")
-		return
-	}
-	_ = s.db(r).SetWatch(acc.ID, exp.Unix(), hist, "")
-	s.db(r).Audit(p.User, "watch.renew", acc.Email)
-	s.RT.Feed.AddFor(acc.UserID, "watch", "Watch renewed")
 	s.redirect(w, r, "/admin/accounts", "ok", "Watch renewed for "+acc.Email+".")
 }
 
 func (s *Server) pauseAccount(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	dis := r.FormValue("disabled") == "1"
-	if err := s.db(r).SetAccountDisabled(id, dis); err != nil {
+	if err := s.opPauseAccount(s.db(r), p.User, id, r.FormValue("disabled") == "1"); err != nil {
 		s.redirect(w, r, "/admin/accounts", "bad", "Could not update the mailbox.")
 		return
 	}
-	s.db(r).Audit(p.User, "account.pause", fmt.Sprintf("id %d paused=%v", id, dis))
 	s.redirect(w, r, "/admin/accounts", "ok", "Mailbox updated.")
 }
 
 func (s *Server) disconnect(w http.ResponseWriter, r *http.Request, p page) {
 	id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-	acc, ok, _ := s.db(r).AccountByID(id)
-	if ok {
-		if c, err := s.RT.Client(r.Context(), acc.Email); err == nil {
-			_ = c.Stop(r.Context())
-		}
-		if tok := acc.RefreshToken(); tok != "" {
-			revokeGoogleToken(tok)
-		}
-	}
-	if err := s.db(r).DeleteAccount(id); err != nil {
+	if err := s.opDisconnect(r.Context(), s.db(r), p.User, id); err != nil {
 		s.redirect(w, r, "/admin/accounts", "bad", "Could not disconnect.")
 		return
 	}
-	s.db(r).Audit(p.User, "google.disconnect", acc.Email)
 	s.redirect(w, r, "/admin/accounts", "ok", "Disconnected.")
 }
 

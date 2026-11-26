@@ -200,6 +200,7 @@ func (d *DB) DeleteUserData(userID int64) error {
 		`DELETE FROM accounts WHERE user_id=?`,
 		`DELETE FROM settings WHERE user_id=?`,
 		`DELETE FROM audit WHERE user_id=?`,
+		`DELETE FROM api_keys WHERE user_id=?`,
 		`DELETE FROM users WHERE id=?`,
 	} {
 		if _, err := tx.Exec(q, userID); err != nil {

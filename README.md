@@ -150,7 +150,7 @@ Sign-in is Google only. Anyone who completes Google sign-in gets their own accou
 
 The Google OAuth client and the Pub/Sub topic are instance-wide, set by the operator through the environment. Users do not paste credentials.
 
-From the **account** page a user can sign out, or delete their account and data: ghook stops the Gmail watch, revokes the Google token, destroys that user's data key (so leftover ciphertext cannot be opened), and deletes the rows.
+From the **account** page a user can sign out, manage API keys, or delete their account and data: ghook stops the Gmail watch, revokes the Google token, destroys that user's data key (so leftover ciphertext cannot be opened), and deletes the rows.
 
 Per-user defaults: 25 targets, 50 routes, and 1000 deliveries per UTC day (`MAX_TARGETS`, `MAX_ROUTES`, `MAX_DELIVERIES_PER_DAY`).
 
@@ -161,8 +161,43 @@ Public paths served by the app, with no session:
 - `/healthz`
 - `/admin/google/callback`
 - `/hooks/pubsub` (and anything under `/hooks/`)
+- `/api/v1` (API key required)
 
 `/metrics` is not public. Set `METRICS_TOKEN` and call it with `Authorization: Bearer <token>`. If the token is unset, `/metrics` returns 404. The text is aggregate only: queue counts, user count, active watches. It does not include account emails.
+
+## API
+
+Everything the admin UI does is also a JSON API under `/api/v1`. Create a key on the **account** page under **API keys**. A key acts as you and sees only your data. It is shown once and stored as a hash. A read-only key can only `GET`. A read-write key can change anything. Revoke a key there or through the API.
+
+Send the key in the `Authorization` header. Keys in a cookie or the query string are refused.
+
+```sh
+KEY=ghk_...
+curl -H "Authorization: Bearer $KEY" https://ghook.example.com/api/v1/status
+curl -H "Authorization: Bearer $KEY" https://ghook.example.com/api/v1/routes
+curl -H "Authorization: Bearer $KEY" -X POST https://ghook.example.com/api/v1/routes \
+  -d '{"name":"billing","target":"<target>","match":{"from":["billing.example.com"]}}'
+curl -H "Authorization: Bearer $KEY" -X PATCH https://ghook.example.com/api/v1/settings \
+  -d '{"timezone":"America/New_York"}'
+curl -H "Authorization: Bearer $KEY" "https://ghook.example.com/api/v1/export?format=json"
+```
+
+Answers are `{"ok":true,"data":...}` or `{"ok":false,"error":"...","field":"..."}` with a matching status. `PATCH` and `PUT` change only the fields you send. A target secret is write only. Each key gets 300 requests a minute. Every write through a key is in the audit log. `GET /api/v1` lists every endpoint.
+
+| Resource | Endpoints |
+| --- | --- |
+| Status | `GET /status` |
+| Accounts | `GET /accounts`, `GET /accounts/{id}`, `DELETE /accounts/{id}`, `POST /accounts/{id}/watch`, `POST /accounts/{id}/pause`, `GET` `PUT /accounts/scopes` |
+| Gmail | `GET` `POST /accounts/{id}/labels`, `GET` `POST /accounts/{id}/filters`, `DELETE /accounts/{id}/filters/{filter}` |
+| Routes | `GET` `POST /routes`, `GET` `PATCH` `PUT` `DELETE /routes/{id}`, `PUT /routes/order`, `POST /routes/{id}/move`, `PUT /routes/{id}/fields/{field}`, `POST /routes/preview`, `GET /routes/simulate` |
+| Targets | `GET` `POST /targets`, `GET` `PATCH` `PUT` `DELETE /targets/{id}`, `POST /targets/{id}/pause`, `POST /targets/{id}/test` |
+| Deliveries | `GET /deliveries`, `GET /deliveries/{id}`, `POST /deliveries/{id}/retry`, `POST /deliveries/{id}/replay`, `POST /deliveries/replay` |
+| Activity | `GET /events`, `GET /audit` |
+| Settings | `GET` `PATCH` `PUT /settings` |
+| Export | `GET /export`, `POST /export`, `POST /import` |
+| Account | `GET` `DELETE /account`, `GET` `POST /account/keys`, `DELETE /account/keys/{id}` |
+
+Export and import take YAML or JSON. To seal or open target secrets, send the passphrase in an `X-Ghook-Passphrase` header.
 
 ## Data protection
 

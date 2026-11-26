@@ -318,3 +318,28 @@ func (l *Live) CreateFilter(ctx context.Context, f Filter) error {
 	}).Context(ctx).Do()
 	return err
 }
+
+// Filters lists the mailbox filters.
+func (l *Live) Filters(ctx context.Context) ([]Filter, error) {
+	res, err := l.svc.Users.Settings.Filters.List("me").Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+	out := []Filter{}
+	for _, f := range res.Filter {
+		item := Filter{ID: f.Id}
+		if f.Criteria != nil {
+			item.From, item.Subject, item.Query = f.Criteria.From, f.Criteria.Subject, f.Criteria.Query
+		}
+		if f.Action != nil && len(f.Action.AddLabelIds) > 0 {
+			item.AddLabel = f.Action.AddLabelIds[0]
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+// DeleteFilter removes one mailbox filter.
+func (l *Live) DeleteFilter(ctx context.Context, id string) error {
+	return l.svc.Users.Settings.Filters.Delete("me", id).Context(ctx).Do()
+}
