@@ -11,10 +11,54 @@ ghook is a multi-tenant Gmail push router: Gmail `users.watch` in, webhook POST 
 - Pull is the default Pub/Sub mode. Push is optional.
 - Apply this to every design decision.
 
+## Conduct
+
+- Leave the repo better than you found it. Small, focused changes; one concern per commit.
+- Tests green before every push and every tag: `gofmt`, `go vet ./...`, `go test ./...`.
+- Clean history: meaningful messages with a body, no fixup noise, no force-push to `main`.
+- Commit author is `Helvio Pedreschi <helvio88@gmail.com>`. Never another address, never a placeholder.
+- Never commit secrets, keys, tokens, `.env` files, or personal data.
+- Releases happen only through `vX.Y.Z` tags (see Release).
+- If you are unsure, read the code first; do not guess behavior.
+
+## Naming
+
+- The product is always lowercase `ghook` (see UI for the wordmark rules).
+- Human-sensible names for everything: routes, targets, settings, functions, endpoints. A name says what the thing is to a user, not how it is built.
+- Say "x", not "twitter".
+
+## It just works
+
+- Users never need to know technical details. No `/v1`, `/api`, ports or protocol choices in the UI path to success.
+- When something has variants (URL forms, header styles, scope spellings), accept them all and probe silently. Do not ask the user to pick.
+- Sensible defaults for every setting. A new option needs a reason a default cannot cover.
+- Errors say what to do next, in one short sentence.
+
+## No fluff
+
+No marketing words, filler, or explanatory paragraphs in the UI, README or this file. If a sentence can be cut without losing meaning, cut it. Specific copy rules are under Style.
+
+## API parity
+
+The JSON API under `/api/v1` (`internal/web/api.go`) covers every admin function. **Every time a function or feature is added, changed, or removed in the UI or admin, the API follows in the same change**, with:
+
+- the shared logic in `internal/web/ops.go`, called by both the UI handler and the API handler (never duplicated),
+- an entry in `apiRoutes()` (which also feeds `GET /api/v1`),
+- tests in `internal/web/api_test.go`,
+- the README API table updated.
+
+API rules:
+
+- Auth is `Authorization: Bearer ghk_...` only. Never accept a key from a cookie or the query string. No session cookie works on `/api/`.
+- A key acts as its own user, with the same tenant isolation as that user's session. Read-only keys get `GET` only.
+- Keys are shown once, stored as SHA-256, revocable, and show last use. Create, revoke and every write through a key are audited.
+- Responses are `{"ok":true,"data":...}` or `{"ok":false,"error":...,"field":...}` with a matching status. `PATCH` and `PUT` are partial. Secrets are write only.
+- New operations return `opError` (status, message, field) so both surfaces show the same message.
+
 ## Style
 
 - Technical audience. No fluff, no hand-holding, short lines.
-- The visual system and the GHCR release workflow follow the same conventions as skgate. That connection is for developers; do not mention skgate in the README or in user-facing UI copy.
+- The visual system and the GHCR release workflow follow the same conventions as skgate. skgate is mentioned only in this file. The README, UI copy, release notes and commit messages never mention it.
 - UI copy: short, plain, direct, in the voice of the rest of the app. Labels are nouns or verbs. A hint is one short sentence, and most fields need none. No filler or marketing words, no "Let's", no explanatory paragraphs, no parentheticals, no em dashes.
 - Prefer no example at all: no sample names in placeholders or help text, and no sentence that exists only to give one. Show a format instead (`<target>`, `HH:MM`, `URL KEY`). If a bot or target name is unavoidable, use `Chief of Staff`. One exception: `match.SubjectExamples` (the collapsed Examples beside the subject regex, mirrored in README) gives generic keyword patterns on purpose, because regex is hard to write from scratch. Each must compile in Go RE2 and have samples in `examples_test.go`. Hosts and addresses use `example.com` only. No house-specific names (job titles, real senders, real banks), no personal data, no real mailboxes or tokens in code, docs, tests or screenshots.
 - One version display: semver (`vX.Y.Z`), in the header only.
@@ -43,7 +87,7 @@ Repo layout:
 | Path | |
 | --- | --- |
 | `cmd/ghook` | Server and CLI (`healthcheck`, `export`, `import`, `replay`) |
-| `internal/web` | Admin UI, templates, static assets, public `/healthz` and `/hooks/pubsub` |
+| `internal/web` | Admin UI, JSON API (`api.go`), shared operations (`ops.go`), public `/healthz` and `/hooks/pubsub` |
 | `internal/engine` | Watch, history, routing into the outbox |
 | `internal/deliver` | POST, retries, digest, quiet hours |
 | `internal/match` | Route filters and the `ghook/<target>` label convention |
@@ -80,6 +124,8 @@ Other conventions:
 
 ## Autosave
 
+The UI has no Save buttons. Edits autosave and confirm with a 1 s "Saved" toast. Create, revoke, delete and other one-off actions are buttons.
+
 There is no Save button on an existing resource. Creation of a new route or target still uses a single Create action. Disconnect, delete, and other destructive actions still use a confirm dialog; those are not saves.
 
 - Forms that edit an existing row have `data-autosave`. The client POSTs the whole `FormData` (so an unchecked box is stored as off) with the CSRF token.
@@ -112,6 +158,7 @@ There is no Save button on an existing resource. Creation of a new route or targ
 
 - Edit forms show only the essentials: a route is a name, its senders and a target; a target is a name and one "webhook" box that takes `URL KEY` (the handler splits it; a URL alone keeps the saved key). Everything else sits in `<details class="more">` ("More options"), which opens by itself only when `routeAdvanced`, `targetAdvanced` or `settingsAdvanced` sees a non-default value. Add a new advanced field to the matching helper.
 - Testing mode (`testing_mode` setting, off by default) shows the route simulator and the replay buttons. It hides UI only; the endpoints stay.
+- Progressive disclosure: show the essentials first. Anything advanced or rarely used (More options, Export and import, API keys) sits behind a collapsed caret. No parentheticals that wrap on mobile.
 
 ## Database upkeep
 
@@ -168,4 +215,7 @@ A rule that nothing enforces is a wish.
 | Version tag `vX.Y.Z` publishes multi-arch images to GHCR | Release workflow on `v*` tags |
 | No horizontal scrollbar on admin or public pages | Headless overflow audit at 1280, 768 and 375 after UI changes. Not yet in CI. |
 | No personal data in examples, docs or tests | Review |
+| UI and API stay in parity | `internal/web/api_test.go`, review |
+| API keys: header only, hashed, tenant-isolated, read-only is GET-only | `TestAPIAuth`, `TestAPICrossTenant` |
+| README never mentions skgate | Review |
 | Work on a branch. Do not merge, tag or deploy unless asked | Review |
