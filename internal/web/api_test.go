@@ -329,7 +329,11 @@ func TestAPIRateLimit(t *testing.T) {
 	}
 	_, scoped, _ := loginAs(t, srv, db, "u-1", "ada@example.com", "Ada")
 	key := mintKey(t, scoped, store.ScopeRead)
-	if r := callAPI(t, srv, "GET", "/api/v1/status", key, ""); r.Code != http.StatusTooManyRequests {
+	if r := callAPI(t, srv, "GET", "/api/v1/status", "ghk_bad", ""); r.Code != http.StatusTooManyRequests {
 		t.Fatalf("failed-auth limit: %d", r.Code)
+	}
+	// Someone else's failures never lock out a valid key.
+	if r := callAPI(t, srv, "GET", "/api/v1/status", key, ""); r.Code != http.StatusOK {
+		t.Fatalf("valid key throttled by failures: %d", r.Code)
 	}
 }

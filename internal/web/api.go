@@ -92,18 +92,11 @@ func (l *limiter) allow(key string, max int) bool {
 	return l.count[key] <= max
 }
 
-func (l *limiter) over(key string, max int) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if time.Now().Unix()/60 != l.win {
-		return false
-	}
-	return l.count[key] >= max
-}
-
 func clientIP(r *http.Request) string {
+	// The last X-Forwarded-For entry is the one the proxy in front added.
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return strings.TrimSpace(strings.Split(xff, ",")[0])
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[len(parts)-1])
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -147,14 +140,15 @@ func (s *Server) api(fn apiFunc) http.HandlerFunc {
 			apiError(w, http.StatusBadRequest, "Send the key in the Authorization header.")
 			return
 		}
+		// Failed attempts are throttled per client. A valid key is never held
+		// back by someone else's failures, so a spoofed address cannot lock it out.
 		ip := clientIP(r)
-		if s.apiFails.over(ip, apiFailPerMinute) {
-			w.Header().Set("Retry-After", "60")
-			apiError(w, http.StatusTooManyRequests, "Too many failed attempts. Try again in a minute.")
-			return
-		}
 		deny := func() {
-			s.apiFails.allow(ip, apiFailPerMinute)
+			if !s.apiFails.allow(ip, apiFailPerMinute) {
+				w.Header().Set("Retry-After", "60")
+				apiError(w, http.StatusTooManyRequests, "Too many failed attempts. Try again in a minute.")
+				return
+			}
 			w.Header().Set("WWW-Authenticate", `Bearer realm="ghook"`)
 			apiError(w, http.StatusUnauthorized, "A valid API key is required.")
 		}
